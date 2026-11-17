@@ -1,0 +1,30 @@
+name: JD FX dashboard checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/jd-fx-full-workspace]
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: node --check tools.js
+      - name: Verify dashboard assets are wired
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("index.html").read_text()
+          assert './tools.css' in html, "tools.css is not linked"
+          assert './tools.js' in html, "tools.js is not linked"
+          assert Path("tools.css").is_file()
+          assert Path("tools.js").is_file()
+          print("Dashboard asset wiring passed.")
+          PY
