@@ -1,0 +1,137 @@
+(() => {
+  const API = String(window.JD_FX_API_BASE || '').replace(/\/+$/, '');
+  const $ = (id) => document.getElementById(id);
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = (v, d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString(undefined,{maximumFractionDigits:d}) : '—';
+  const panel = (title, sub, body) => '<div class="panel"><div class="panel-head"><div><h3>'+title+'</h3><div class="sub">'+sub+'</div></div></div>'+body+'</div>';
+  const call = async (path) => {
+    if (!API) throw new Error('API base URL is not configured.');
+    const r = await fetch(API + path, {headers:{Accept:'application/json'}});
+    const data = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(data.detail || data.message || ('HTTP '+r.status));
+    return data;
+  };
+  const nav = [
+    ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],
+    ['signals','Signals','↗'],['alerts','Alert Centre','◷'],['planning','Trade Planner','◎'],
+    ['paper','Paper Trading','▣'],['backtest','Backtesting & Performance','▤'],
+    ['news','Market News','▤'],['calendar','Economic Calendar','▦'],['settings','Settings','⚙']
+  ];
+  const pages = [
+    ['algo','AI Scanner','Multi-timeframe confluence scanner across the supported market universe.'],
+    ['signals','Signals','Current and historical research signals with transparent evidence.'],
+    ['paper','Paper Trading','A browser-local simulation ledger. No broker connection or real orders.'],
+    ['backtest','Backtesting & Performance','Resolved signal outcomes and performance evidence from the API.'],
+    ['news','Market News','Recent headlines from the configured news aggregator.'],
+    ['calendar','Economic Calendar','Upcoming FRED releases when a FRED key is configured.']
+  ];
+  function addPage(id,title,sub,body) {
+    const main=document.querySelector('main');
+    const foot=main.querySelector('.foot');
+    const s=document.createElement('section');
+    s.className='page'; s.id='page-'+id;
+    s.innerHTML='<div class="headline"><div><h2>'+title+'</h2><p>'+sub+'</p></div></div>'+body;
+    main.insertBefore(s,foot);
+  }
+  function mount() {
+    const sidebar=document.querySelector('.sidebar');
+    if (!sidebar) return;
+    const old=[...sidebar.querySelectorAll('.nav')];
+    old.forEach(n=>n.remove());
+    nav.forEach(([id,label,ico])=>{
+      const n=document.createElement('div'); n.className='nav'+(id==='overview'?' active':'');
+      n.dataset.page=id; n.tabIndex=0; n.setAttribute('role','button');
+      n.innerHTML='<span class="ico">'+ico+'</span>'+label;
+      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='signals')loadSignals(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar(); if(id==='paper')loadPaperQuotes();});
+      n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click();}});
+      sidebar.insertBefore(n,sidebar.querySelector('.side-note'));
+    });
+    pages.forEach(([id,title,sub])=>{
+      if(id==='algo') addPage(id,title,sub,
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
+      if(id==='signals') addPage(id,title,sub,
+        '<div class="panel"><div class="panel-head"><div><h3>Signal stream</h3><div class="sub">Latest alert history and current scan signals.</div></div><button class="btn" id="signalsReload">Refresh</button></div><div id="signalsResults">'+empty('Loading signal history…')+'</div></div>');
+      if(id==='paper') addPage(id,title,sub,
+        '<div class="notice">Paper trades are stored only in this browser. Quotes are provider snapshots, not tick-by-tick streaming. This does not place real orders.</div><div class="panel"><h3>Open a simulated position</h3><div class="formgrid"><div><label>Symbol</label><select class="field" id="paperSymbol"><option>EURUSD</option><option>GBPUSD</option><option>USDJPY</option><option>USDCAD</option><option>XAUUSD</option><option>BTCUSD</option><option>ETHUSD</option></select></div><div><label>Side</label><select class="field" id="paperSide"><option>BUY</option><option>SELL</option></select></div><div><label>Entry price</label><input class="field" id="paperEntry" type="number" step="any" placeholder="Enter fill price"></div><div><label>Units (not lots)</label><input class="field" id="paperUnits" type="number" min="0.000001" step="any" value="1"></div><div><label>Stop loss (optional)</label><input class="field" id="paperStop" type="number" step="any"></div><div><label>Take profit (optional)</label><input class="field" id="paperTarget" type="number" step="any"></div></div><div class="row" style="margin-top:12px"><button class="btn primary" id="paperOpen">Save paper trade</button><button class="btn" id="paperRefresh">Refresh quotes</button></div></div><div class="panel"><div class="panel-head"><div><h3>Paper portfolio</h3><div class="sub" id="paperQuoteStatus">Quote status not checked.</div></div></div><div id="paperTrades">'+empty('No simulated positions yet.')+'</div></div>');
+      if(id==='backtest') addPage(id,title,sub,
+        '<div class="notice">This view reports the API’s historical outcomes for qualified signal alerts. It is not a user-defined strategy optimizer. Results exclude spread, commission, slippage, partial exits and broker-specific fills.</div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Max drawdown</div><div class="value" id="perfDrawdown">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
+      if(id==='news') addPage(id,title,sub,
+        '<div class="panel"><div class="panel-head"><div><h3>Latest headlines</h3><div class="sub">Aggregated headlines; open publisher sources to assess context.</div></div><button class="btn" id="newsReload">Refresh news</button></div><div id="newsFeed">'+empty('Loading market headlines…')+'</div></div>');
+      if(id==='calendar') addPage(id,title,sub,
+        '<div class="notice">Calendar coverage depends on the FRED API key and FRED release schedule. This is not a complete global economic calendar and may not provide guaranteed release times or impact ratings.</div><div class="panel"><div class="panel-head"><div><h3>Upcoming economic releases</h3><div class="sub">Next 14 days</div></div><button class="btn" id="calendarReload">Refresh calendar</button></div><div id="calendarFeed">'+empty('Loading economic calendar…')+'</div></div>');
+    });
+    const sideNote=sidebar.querySelector('.side-note');
+    if(sideNote) sideNote.innerHTML='<b style="color:var(--gold)">Research mode</b><br>Manual decision support only. No broker execution or automated orders.';
+    $('algoRun').onclick=scanAlgo; $('signalsReload').onclick=loadSignals;
+    $('paperOpen').onclick=openPaperTrade; $('paperRefresh').onclick=loadPaperQuotes;
+    $('perfReload').onclick=loadPerformance; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar;
+    document.addEventListener('click',e=>{const b=e.target.closest('[data-paper-close]');if(b)closePaperTrade(b.dataset.paperClose);});
+    loadPaperTrades();
+  }
+  function switchPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));}
+  function empty(s){return '<div class="live-empty">'+esc(s)+'</div>';}
+  function showError(id,e){const el=$(id);if(el)el.innerHTML=empty('Could not load data: '+(e.message||e));}
+  async function scanAlgo(){
+    const el=$('algoResults'); el.innerHTML=empty('Scanning instruments and timeframes…');
+    const symbols=$('algoSymbols').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,8);
+    const frames=$('algoFrames').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,4);
+    if(symbols.length<1||frames.length<2){el.innerHTML=empty('Enter 1–8 symbols and 2–4 timeframes.');return;}
+    try{
+      const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols.join(','))+'&timeframes='+encodeURIComponent(frames.join(',')));
+      const rows=d.results||d.signals||d.items||[];
+      if(!rows.length){el.innerHTML=empty('No scan results were returned. Check the API response and provider availability.');return;}
+      el.innerHTML='<div class="panel"><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Timeframe</th><th>Direction</th><th>Confluence</th><th>Alert</th><th>Entry</th><th>Stop</th><th>TP1</th></tr></thead><tbody>'+rows.map(x=>{
+        const plan=x.plan||x.entry_plan||x.candidate_plan||{};
+        return '<tr><td>'+esc(x.symbol||x.instrument_id)+'</td><td>'+esc(x.timeframe||x.primary_timeframe)+'</td><td>'+esc(x.direction||x.side||x.bias||'—')+'</td><td>'+fmt(x.confluence_score??x.score,1)+'</td><td>'+esc(x.alert_status||x.status||'—')+'</td><td>'+fmt(plan.entry??plan.reference_entry,5)+'</td><td>'+fmt(plan.stop_loss,5)+'</td><td>'+fmt(plan.take_profit_1??plan.tp1,5)+'</td></tr>';
+      }).join('')+'</tbody></table></div></div><div class="panel"><div class="sub">Raw response for transparency</div><pre class="jd-json">'+esc(JSON.stringify(d,null,2))+'</pre></div>';
+    }catch(e){showError('algoResults',e);}
+  }
+  async function loadSignals(){
+    const el=$('signalsResults');el.innerHTML=empty('Loading signal history…');
+    try{const [a,p]=await Promise.all([call('/alerts/history'),call('/algo/performance')]);
+      const events=a.events||a.alerts||[];
+      const stats=p.summary||p.metrics||p;
+      el.innerHTML='<div class="metrics"><div class="metric"><div class="label">Historical win rate</div><div class="value">'+fmt(stats.win_rate_pct??stats.win_rate,1)+(stats.win_rate_pct!=null||stats.win_rate!=null?'%':'')+'</div></div><div class="metric"><div class="label">Expectancy (R)</div><div class="value">'+fmt(stats.expectancy_r??stats.expectancy,2)+'</div></div><div class="metric"><div class="label">Resolved</div><div class="value">'+fmt(stats.resolved_count??stats.resolved_samples??stats.total_resolved,0)+'</div></div><div class="metric"><div class="label">Alert records</div><div class="value">'+events.length+'</div></div></div><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Side</th><th>Timeframe</th><th>Status</th><th>Signal candle</th></tr></thead><tbody>'+events.slice(0,50).map(x=>'<tr><td>'+esc(x.symbol||x.instrument_id)+'</td><td>'+esc(x.side)+'</td><td>'+esc(x.timeframe)+'</td><td>'+esc(x.status||x.alert_status)+'</td><td>'+esc(x.signal_candle_utc||x.created_at)+'</td></tr>').join('')+'</tbody></table></div>';
+    }catch(e){showError('signalsResults',e);}
+  }
+  async function loadPerformance(){
+    try{const d=await call('/algo/performance');const s=d.summary||d.metrics||d;
+      $('perfResolved').textContent=fmt(s.resolved_count??s.resolved_samples??s.total_resolved,0);
+      $('perfWin').textContent=fmt(s.win_rate_pct??s.win_rate,1)+(s.win_rate_pct!=null||s.win_rate!=null?'%':'');
+      $('perfExpectancy').textContent=fmt(s.expectancy_r??s.expectancy,2)+'R';
+      $('perfDrawdown').textContent=fmt(s.max_drawdown_pct??s.max_drawdown,2)+(s.max_drawdown_pct!=null||s.max_drawdown!=null?'%':'');
+      $('perfRaw').textContent=JSON.stringify(d,null,2);
+    }catch(e){$('perfRaw').textContent='Could not load performance report: '+e.message;}
+  }
+  async function loadNews(){
+    const el=$('newsFeed');el.innerHTML=empty('Loading headlines…');
+    try{const d=await call('/news');const rows=d.items||d.articles||d.headlines||[];
+      el.innerHTML=rows.length?rows.slice(0,40).map(x=>'<div class="jd-feed-item"><div><b>'+esc(x.title||x.headline||'Untitled headline')+'</b><div class="sub">'+esc(x.source||x.publisher||'News source')+' · '+esc(x.published_at||x.pubDate||x.date||'')+'</div><p class="sub">'+esc(x.summary||x.description||'')+'</p></div>'+(x.url||x.link?'<a target="_blank" rel="noopener noreferrer" href="'+esc(x.url||x.link)+'">Open source ↗</a>':'')+'</div>').join(''):empty('The news endpoint returned no headlines.');
+    }catch(e){showError('newsFeed',e);}
+  }
+  async function loadCalendar(){
+    const el=$('calendarFeed');el.innerHTML=empty('Loading releases…');
+    try{const d=await call('/calendar?days=14');const rows=d.events||d.releases||d.results||[];
+      el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Release</th><th>Country</th><th>Series</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.date||x.release_date||x.datetime)+'</td><td>'+esc(x.name||x.title||x.release_name)+'</td><td>'+esc(x.country||'US')+'</td><td>'+esc(x.series_id||x.id||'FRED')+'</td></tr>').join('')+'</tbody></table></div>':empty('No upcoming FRED releases returned. Check FRED_API_KEY configuration and endpoint availability.');
+    }catch(e){showError('calendarFeed',e);}
+  }
+  const paperKey='jdFxPaperTradesV1';
+  function paperTrades(){try{return JSON.parse(localStorage.getItem(paperKey)||'[]')}catch{return[]}}
+  function savePaper(rows){localStorage.setItem(paperKey,JSON.stringify(rows));}
+  function openPaperTrade(){
+    const symbol=$('paperSymbol').value,side=$('paperSide').value,entry=Number($('paperEntry').value),units=Number($('paperUnits').value),stop=$('paperStop').value?Number($('paperStop').value):null,target=$('paperTarget').value?Number($('paperTarget').value):null;
+    if(!(entry>0&&units>0)){alert('Enter a valid entry price and positive units.');return;}
+    if(stop!=null&&((side==='BUY'&&stop>=entry)||(side==='SELL'&&stop<=entry))){alert('Stop loss must be below entry for BUY and above entry for SELL.');return;}
+    if(target!=null&&((side==='BUY'&&target<=entry)||(side==='SELL'&&target>=entry))){alert('Take profit must be above entry for BUY and below entry for SELL.');return;}
+    const rows=paperTrades();rows.unshift({id:Date.now().toString(),symbol,side,entry,units,stop,target,opened_at:new Date().toISOString(),status:'OPEN'});savePaper(rows);loadPaperTrades();$('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';
+  }
+  function closePaperTrade(id){const rows=paperTrades();const t=rows.find(x=>x.id===id);if(!t)return;const exit=Number(prompt('Enter simulated exit price:'));if(!(exit>0))return;t.exit=exit;t.closed_at=new Date().toISOString();t.status='CLOSED';t.pnl=(exit-t.entry)*t.units*(t.side==='BUY'?1:-1);savePaper(rows);loadPaperTrades();}
+  function loadPaperTrades(){
+    const rows=paperTrades();const el=$('paperTrades');if(!el)return;
+    el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Pair</th><th>Side</th><th>Entry</th><th>Units</th><th>Stop</th><th>Target</th><th>Status</th><th>P/L (price units)</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.symbol)+'</td><td>'+esc(x.side)+'</td><td>'+fmt(x.entry,5)+'</td><td>'+fmt(x.units,4)+'</td><td>'+fmt(x.stop,5)+'</td><td>'+fmt(x.target,5)+'</td><td>'+esc(x.status)+'</td><td>'+fmt(x.pnl,5)+'</td><td>'+(x.status==='OPEN'?'<button class="small-action" data-paper-close="'+esc(x.id)+'">Close</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No simulated positions yet. Open a paper trade above.</div>';
+  }
+  async function loadPaperQuotes(){
+    try{const d=await call('/market/quotes?symbols=EURUSD,GBPUSD,USDJPY,USDCAD,XAUUSD,BTCUSD,ETHUSD');const q=d.quotes||[];$('paperQuoteStatus').textContent=q.length+' quote snapshots returned · '+new Date().toLocaleTimeString();}catch(e){$('paperQuoteStatus').textContent='Quotes unavailable: '+e.message;}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
+})();
