@@ -21,13 +21,14 @@
     }
   };
   const nav = [
-    ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],
+    ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],['swing','Swing & Position Radar','↗'],
     ['signals','Signals','↗'],['alerts','Alert Centre','◷'],['planning','Trade Planner','◎'],
     ['paper','Paper Trading','▣'],['backtest','Backtesting & Performance','▤'],
     ['news','Market News','▤'],['calendar','Economic Calendar','▦'],['settings','Settings','⚙']
   ];
   const pages = [
     ['algo','AI Scanner','Multi-timeframe confluence scanner across the supported market universe.'],
+    ['swing','Swing & Position Radar','Ranked multi-day and weekly research candidates with wider risk-based targets.'],
     ['signals','Signals','Current and historical research signals with transparent evidence.'],
     ['paper','Paper Trading','A browser-local simulation ledger. No broker connection or real orders.'],
     ['backtest','Backtesting & Performance','Resolved signal outcomes and performance evidence from the API.'],
@@ -51,11 +52,13 @@
       const n=document.createElement('div'); n.className='nav'+(id==='overview'?' active':'');
       n.dataset.page=id; n.tabIndex=0; n.setAttribute('role','button');
       n.innerHTML='<span class="ico">'+ico+'</span>'+label;
-      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='signals')loadSignals(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar(); if(id==='paper')loadPaperQuotes();});
+      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='swing')scanSwing(); if(id==='signals')loadSignals(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar(); if(id==='paper')loadPaperQuotes();});
       n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click();}});
       sidebar.insertBefore(n,sidebar.querySelector('.side-note'));
     });
     pages.forEach(([id,title,sub])=>{
+      if(id==='swing') addPage(id,title,sub,
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,XAUUSD,BTCUSD,SPX500,NDX100" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Requires completed daily and weekly candles with aligned direction. Targets are 2R, 3R and 4R projections, not promises. Target-specific historical validation is not yet available. No orders or notifications are sent from this scanner.</p></div><div id="swingResults">'+empty('Run the scanner to rank multi-day and weekly candidates.')+'</div>');
       if(id==='algo') addPage(id,title,sub,
         '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
       if(id==='signals') addPage(id,title,sub,
@@ -71,7 +74,7 @@
     });
     const sideNote=sidebar.querySelector('.side-note');
     if(sideNote) sideNote.innerHTML='<b style="color:var(--gold)">Research mode</b><br>Manual decision support only. No broker execution or automated orders.';
-    $('algoRun').onclick=scanAlgo; $('signalsReload').onclick=loadSignals;
+    $('algoRun').onclick=scanAlgo; $('swingRun').onclick=scanSwing; $('signalsReload').onclick=loadSignals;
     $('paperOpen').onclick=openPaperTrade; $('paperRefresh').onclick=loadPaperQuotes;
     $('perfReload').onclick=loadPerformance; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar; $('btRun').onclick=runCsvBacktest;
     document.addEventListener('click',e=>{const b=e.target.closest('[data-paper-close]');if(b)closePaperTrade(b.dataset.paperClose);});
@@ -96,6 +99,28 @@
         return '<tr><td>'+esc(x.symbol||x.instrument_id)+'</td><td>'+esc(x.timeframe||'—')+'</td><td>'+esc(direction)+'</td><td>'+fmt(x.confidence_score,1)+'</td><td>'+fmt(x.timeframe_agreement_pct,1)+'%</td><td>'+esc(status)+'</td><td>'+fmt(plan.reference_entry,5)+'</td><td>'+fmt(plan.stop_loss,5)+'</td><td>'+fmt(plan.take_profit_1,5)+'</td></tr>';
       }).join('')+'</tbody></table></div></div><div class="panel"><div class="sub">Raw response for transparency</div><pre class="jd-json">'+esc(JSON.stringify(d,null,2))+'</pre></div>';
     }catch(e){showError('algoResults',e);}
+  }
+  async function scanSwing(){
+    const el=$('swingResults');
+    const symbols=$('swingSymbols').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+    const horizon=$('swingHorizon').value;
+    if(!symbols.length||symbols.length>8||new Set(symbols).size!==symbols.length){
+      el.innerHTML=empty('Enter 1–8 unique supported instrument symbols.');return;
+    }
+    el.innerHTML=empty('Checking completed daily and weekly candles and ranking swing candidates…');
+    try{
+      const d=await call('/algo/swing-scan?symbols='+encodeURIComponent(symbols.join(','))+'&horizon='+encodeURIComponent(horizon)+'&outputsize=500',120000);
+      const rows=d.results||[];
+      if(!rows.length){el.innerHTML=empty('No instruments were returned. Check the supported instrument catalogue.');return;}
+      el.innerHTML='<div class="panel"><div class="sub">Scan completed in '+fmt((d.scan_duration_ms||0)/1000,1)+'s · '+esc(d.expected_holding_period||'')+' · '+esc(d.horizon||'')+'</div><div class="tablewrap"><table><thead><tr><th>Rank</th><th>Instrument</th><th>Direction</th><th>Daily / Weekly</th><th>Score</th><th>Entry</th><th>Stop</th><th>TP 2R</th><th>TP 3R</th><th>TP 4R</th><th>State</th></tr></thead><tbody>'+rows.map((x,i)=>{
+        const p=x.entry_plan||{},t=x.timeframes||{},daily=t['1d']||{},weekly=t['1w']||{},side=x.alert?.side||'NO_TRADE',state=x.swing?.qualification||x.status||'unavailable';
+        return '<tr><td>'+(i+1)+'</td><td>'+esc(x.symbol||'—')+'</td><td>'+esc(side)+'</td><td>'+esc(daily.direction||daily.status||'—')+' / '+esc(weekly.direction||weekly.status||'—')+'</td><td>'+fmt(x.swing?.rank_score,1)+'</td><td>'+fmt(p.reference_entry,5)+'</td><td>'+fmt(p.stop_loss,5)+'</td><td>'+fmt(p.take_profit_1,5)+'</td><td>'+fmt(p.take_profit_2,5)+'</td><td>'+fmt(p.take_profit_3,5)+'</td><td>'+esc(state.replaceAll('_',' '))+'</td></tr>';
+      }).join('')+'</tbody></table></div></div><div class="panel"><h3>Candidate notes & data quality</h3>'+rows.map(x=>{
+        const s=x.swing||{},p=x.entry_plan||{},t=x.timeframes||{},daily=t['1d']||{},weekly=t['1w']||{};
+        const evidence=[...(daily.evidence||[]),...(weekly.evidence||[])].slice(0,8);
+        return '<article class="live-card" style="margin:10px 0"><div class="live-card-top"><strong>'+esc(x.symbol||'Instrument')+' · '+esc(x.alert?.side||'NO_TRADE')+'</strong><span class="signal watch">'+esc((s.qualification||x.status||'unavailable').replaceAll('_',' '))+'</span></div><p class="sub">'+esc(s.expected_holding_period||'')+' · Rank score '+fmt(s.rank_score,1)+' (not a probability)</p><div class="live-meta"><span>Entry zone</span><b>'+fmt(p.entry_zone_low,5)+' – '+fmt(p.entry_zone_high,5)+'</b></div><div class="live-meta"><span>Daily / weekly freshness</span><b>'+esc(daily.freshness?.reason||daily.error||'—')+' / '+esc(weekly.freshness?.reason||weekly.error||'—')+'</b></div><div class="live-meta"><span>Historical baseline</span><b>'+(x.historical_setup_statistics?.win_rate_pct==null?'Not established':fmt(x.historical_setup_statistics.win_rate_pct,1)+'%')+' · '+fmt(x.historical_setup_statistics?.resolved_samples,0)+' samples</b></div><p class="sub">Evidence: '+esc(evidence.join(' · ')||s.qualification||'No aligned evidence')+'</p><p class="sub">'+esc(s.target_validation||'')+'</p><p class="sub">'+esc(s.invalidation||'')+'</p></article>';
+      }).join('')+'</div><div class="notice">Research only. Daily/weekly alignment is required; stale or unavailable candles are not treated as confirmation. 2R/3R/4R targets are not yet backed by target-specific historical results. Check news, spreads, slippage, overnight gaps and account risk.</div>';
+    }catch(e){showError('swingResults',e);}
   }
   async function loadSignals(){
     const el=$('signalsResults');el.innerHTML=empty('Loading signal history…');
