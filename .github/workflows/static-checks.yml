@@ -1,0 +1,39 @@
+name: Dashboard static checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, feat/swing-position-radar]
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check dashboard helper JavaScript
+        run: node --check tools.js
+      - name: Check inline dashboard JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", html, re.S | re.I)
+          if not scripts:
+              raise SystemExit("No inline JavaScript blocks found in index.html")
+          for index, script in enumerate(scripts):
+              Path(f"/tmp/jd-fx-inline-{index}.js").write_text(script, encoding="utf-8")
+          print(f"Extracted {len(scripts)} inline script block(s).")
+          PY
+          for file in /tmp/jd-fx-inline-*.js; do node --check "$file"; done
