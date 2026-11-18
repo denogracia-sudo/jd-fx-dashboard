@@ -58,7 +58,7 @@
     });
     pages.forEach(([id,title,sub])=>{
       if(id==='swing') addPage(id,title,sub,
-        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,XAUUSD,BTCUSD,SPX500,NDX100" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Requires completed daily and weekly candles with aligned direction. Targets are 2R, 3R and 4R projections, not promises. Target-specific historical validation is not yet available. No orders or notifications are sent from this scanner.</p></div><div id="swingResults">'+empty('Run the scanner to rank multi-day and weekly candidates.')+'</div>');
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Leave symbols blank to scan all 14 supported instruments, or enter a custom list. Requires completed daily and weekly candles with aligned direction. Targets are 2R, 3R and 4R projections, not promises. Target-specific historical validation is not yet available. No orders or notifications are sent from this scanner.</p></div><div id="swingResults">'+empty('Run the scanner to rank multi-day and weekly candidates.')+'</div>');
       if(id==='algo') addPage(id,title,sub,
         '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
       if(id==='signals') addPage(id,title,sub,
@@ -102,17 +102,34 @@
   }
   async function scanSwing(){
     const el=$('swingResults');
-    const symbols=$('swingSymbols').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+    const raw=$('swingSymbols').value.trim();
     const horizon=$('swingHorizon').value;
-    if(!symbols.length||symbols.length>8||new Set(symbols).size!==symbols.length){
-      el.innerHTML=empty('Enter 1–8 unique supported instrument symbols.');return;
-    }
-    el.innerHTML=empty('Checking completed daily and weekly candles and ranking swing candidates…');
+    let symbols=[];
     try{
-      const d=await call('/algo/swing-scan?symbols='+encodeURIComponent(symbols.join(','))+'&horizon='+encodeURIComponent(horizon)+'&outputsize=500',120000);
-      const rows=d.results||[];
+      if(raw){
+        symbols=raw.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+      }else{
+        const catalogue=await call('/instruments');
+        symbols=(catalogue.instruments||[]).map(x=>x.id||x.canonical).filter(Boolean);
+      }
+      if(!symbols.length||symbols.length>14||new Set(symbols).size!==symbols.length){
+        el.innerHTML=empty('Enter 1–14 unique supported symbols, or leave the field blank to scan the full catalogue.');return;
+      }
+      const batches=[];
+      for(let i=0;i<symbols.length;i+=8)batches.push(symbols.slice(i,i+8));
+      const rows=[];
+      for(let i=0;i<batches.length;i++){
+        el.innerHTML=empty('Scanning market batch '+(i+1)+' of '+batches.length+' · '+symbols.length+' instruments · '+(horizon==='weekly'?'1–3 weeks':'2–5 trading days')+'…');
+        const d=await call('/algo/swing-scan?symbols='+encodeURIComponent(batches[i].join(','))+'&horizon='+encodeURIComponent(horizon)+'&outputsize=500',120000);
+        rows.push(...(d.results||[]));
+      }
+      rows.sort((a,b)=>{
+        const aq=a.swing?.qualification==='research_candidate'?1:0;
+        const bq=b.swing?.qualification==='research_candidate'?1:0;
+        return bq-aq||Number(b.swing?.rank_score||0)-Number(a.swing?.rank_score||0);
+      });
       if(!rows.length){el.innerHTML=empty('No instruments were returned. Check the supported instrument catalogue.');return;}
-      el.innerHTML='<div class="panel"><div class="sub">Scan completed in '+fmt((d.scan_duration_ms||0)/1000,1)+'s · '+esc(d.expected_holding_period||'')+' · '+esc(d.horizon||'')+'</div><div class="tablewrap"><table><thead><tr><th>Rank</th><th>Instrument</th><th>Direction</th><th>Daily / Weekly</th><th>Score</th><th>Entry</th><th>Stop</th><th>TP 2R</th><th>TP 3R</th><th>TP 4R</th><th>State</th></tr></thead><tbody>'+rows.map((x,i)=>{
+      el.innerHTML='<div class="panel"><div class="sub">Scanned '+symbols.length+' instruments · '+batches.length+' bounded batches · '+(horizon==='weekly'?'1–3 weeks':'2–5 trading days')+'</div><div class="tablewrap"><table><thead><tr><th>Rank</th><th>Instrument</th><th>Direction</th><th>Daily / Weekly</th><th>Score</th><th>Entry</th><th>Stop</th><th>TP 2R</th><th>TP 3R</th><th>TP 4R</th><th>State</th></tr></thead><tbody>'+rows.map((x,i)=>{
         const p=x.entry_plan||{},t=x.timeframes||{},daily=t['1d']||{},weekly=t['1w']||{},side=x.alert?.side||'NO_TRADE',state=x.swing?.qualification||x.status||'unavailable';
         return '<tr><td>'+(i+1)+'</td><td>'+esc(x.symbol||'—')+'</td><td>'+esc(side)+'</td><td>'+esc(daily.direction||daily.status||'—')+' / '+esc(weekly.direction||weekly.status||'—')+'</td><td>'+fmt(x.swing?.rank_score,1)+'</td><td>'+fmt(p.reference_entry,5)+'</td><td>'+fmt(p.stop_loss,5)+'</td><td>'+fmt(p.take_profit_1,5)+'</td><td>'+fmt(p.take_profit_2,5)+'</td><td>'+fmt(p.take_profit_3,5)+'</td><td>'+esc(state.replaceAll('_',' '))+'</td></tr>';
       }).join('')+'</tbody></table></div></div><div class="panel"><h3>Candidate notes & data quality</h3>'+rows.map(x=>{
