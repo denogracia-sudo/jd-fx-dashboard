@@ -4,12 +4,21 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = (v, d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString(undefined,{maximumFractionDigits:d}) : '—';
   const panel = (title, sub, body) => '<div class="panel"><div class="panel-head"><div><h3>'+title+'</h3><div class="sub">'+sub+'</div></div></div>'+body+'</div>';
-  const call = async (path) => {
+  const call = async (path, timeoutMs=30000) => {
     if (!API) throw new Error('API base URL is not configured.');
-    const r = await fetch(API + path, {headers:{Accept:'application/json'}});
-    const data = await r.json().catch(()=>({}));
-    if (!r.ok) throw new Error(data.detail || data.message || ('HTTP '+r.status));
-    return data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(API + path, {headers:{Accept:'application/json'}, signal:controller.signal});
+      const data = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(data.detail || data.message || ('HTTP '+r.status));
+      return data;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Request timed out after '+Math.round(timeoutMs/1000)+' seconds.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   };
   const nav = [
     ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],
@@ -48,7 +57,7 @@
     });
     pages.forEach(([id,title,sub])=>{
       if(id==='algo') addPage(id,title,sub,
-        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
       if(id==='signals') addPage(id,title,sub,
         '<div class="panel"><div class="panel-head"><div><h3>Signal stream</h3><div class="sub">Latest alert history and current scan signals.</div></div><button class="btn" id="signalsReload">Refresh</button></div><div id="signalsResults">'+empty('Loading signal history…')+'</div></div>');
       if(id==='paper') addPage(id,title,sub,
@@ -77,10 +86,10 @@
     const frames=$('algoFrames').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,4);
     if(symbols.length<1||frames.length<2){el.innerHTML=empty('Enter 1–8 symbols and 2–4 timeframes.');return;}
     try{
-      const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols.join(','))+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false');
+      const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols.join(','))+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
       const rows=d.results||d.signals||d.items||[];
       if(!rows.length){el.innerHTML=empty('No scan results were returned. Check the API response and provider availability.');return;}
-      el.innerHTML='<div class="panel"><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Primary TF</th><th>Direction</th><th>Confluence</th><th>TF agreement</th><th>Alert status</th><th>Reference entry</th><th>Stop</th><th>TP1</th></tr></thead><tbody>'+rows.map(x=>{
+      el.innerHTML='<div class="panel"><div class="sub">Completed in '+fmt((d.scan_duration_ms||0)/1000,1)+'s · '+fmt(d.scan_workers||0,0)+' bounded concurrent workers · provider latency is reported per timeframe.</div><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Primary TF</th><th>Direction</th><th>Confluence</th><th>TF agreement</th><th>Alert status</th><th>Reference entry</th><th>Stop</th><th>TP1</th></tr></thead><tbody>'+rows.map(x=>{
         const plan=x.entry_plan||{};
         const direction=x.alert?.side||'NO_TRADE';
         const status=x.alert?.status||x.status||'—';
