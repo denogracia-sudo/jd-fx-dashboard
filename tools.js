@@ -66,7 +66,7 @@
       const n=document.createElement('div'); n.className='nav'+(id==='overview'?' active':'');
       n.dataset.page=id; n.tabIndex=0; n.setAttribute('role','button');
       n.innerHTML='<span class="ico">'+ico+'</span>'+label;
-      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='swing')scanSwing(); if(id==='signals')loadSignals(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar(); if(id==='paper')loadPaperQuotes();});
+      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='swing')scanSwing(); if(id==='signals')loadSignals(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar(); if(id==='paper')loadPaperQuotes(); if(id==='settings')loadDiagnostics();});
       n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click();}});
       sidebar.insertBefore(n,sidebar.querySelector('.side-note'));
     });
@@ -90,7 +90,7 @@
     if(sideNote) sideNote.innerHTML='<b style="color:var(--gold)">Research mode</b><br>Manual decision support only. No broker execution or automated orders.';
     $('algoRun').onclick=scanAlgo; $('swingRun').onclick=scanSwing; $('signalsReload').onclick=loadSignals;
     $('paperOpen').onclick=openPaperTrade; $('paperRefresh').onclick=loadPaperQuotes;
-    $('perfReload').onclick=loadPerformance; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar; $('btRun').onclick=runCsvBacktest;
+    $('perfReload').onclick=loadPerformance; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar; $('btRun').onclick=runCsvBacktest; $('diagReload').onclick=loadDiagnostics; $('testTwelveData').onclick=testTwelveData;
     document.addEventListener('click',e=>{const b=e.target.closest('[data-paper-close]');if(b)closePaperTrade(b.dataset.paperClose);});
     loadPaperTrades();
   }
@@ -181,6 +181,25 @@
       if(!r.ok)throw new Error(d.detail||d.message||('HTTP '+r.status));
       el.innerHTML='<div class="sub">Historical simulation output</div><pre class="jd-json">'+esc(JSON.stringify(d,null,2))+'</pre>';
     }catch(e){el.innerHTML=empty('Backtest failed: '+e.message);}
+  }
+  async function loadDiagnostics(){
+    const el=$('diagGrid');if(!el)return;
+    el.innerHTML=empty('Checking API, database and provider configuration…');
+    try{
+      const [d,p]=await Promise.all([call('/system/diagnostics'),call('/market/providers')]);
+      const tw=(d.checks||{}).twelvedata_key_configured;
+      const storage=d.storage||{},execution=(d.checks||{}).trading_execution_enabled;
+      el.innerHTML='<div class="metric"><div class="label">API status</div><div class="value">'+esc(d.status||'unknown')+'</div><div class="sub">Version '+esc(d.version||'—')+'</div></div><div class="metric"><div class="label">Persistent database</div><div class="value">'+(storage.connected?'Connected':'Unavailable')+'</div><div class="sub">'+esc(storage.backend||'unknown')+' · '+fmt(storage.rows,0)+' candles</div></div><div class="metric"><div class="label">Twelve Data key</div><div class="value">'+(tw?'Configured':'Missing')+'</div><div class="sub">Presence only · authentication unverified</div></div><div class="metric"><div class="label">Broker execution</div><div class="value">'+(execution?'Enabled':'Disabled')+'</div><div class="sub">JD FX research mode</div></div>';
+      $('diagNote').textContent='Storage: '+(storage.connected?'connected':'not connected')+' · latest stored candle snapshot '+(storage.latest_stored_at||'not available')+' · FRED calendar '+((d.checks||{}).fred_key_configured?'configured':'not configured')+'. Provider routing: '+JSON.stringify(p.routing||{});
+    }catch(e){el.innerHTML=empty('System diagnostics failed: '+e.message);}
+  }
+  async function testTwelveData(){
+    const el=$('twelveTestState');el.textContent='Requesting a fresh EUR/USD candle snapshot from Twelve Data…';
+    try{
+      const d=await call('/analyze/provider?symbol=EURUSD&provider_name=twelvedata&interval=1h&outputsize=100',60000);
+      if(d.status!=='ok')throw new Error(d.message||d.error||('Provider returned '+(d.status||'an unknown status')));
+      el.textContent='Twelve Data candle request succeeded · '+(d.candles||d.candle_count||'fresh')+' · '+(d.data_source?.freshness?.reason||'freshness checked');
+    }catch(e){el.textContent='Twelve Data test failed: '+e.message+'. The key can be present but rejected by the provider; rotate it in FastAPI Cloud if the error indicates authentication.';}
   }
   async function loadPerformance(){
     try{
