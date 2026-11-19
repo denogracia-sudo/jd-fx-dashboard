@@ -1,2 +1,2 @@
-// JD FX Intelligence API endpoint. Public base URL only; secrets stay on the backend.
-window.JD_FX_API_BASE = 'https://jd-fx-intelligence-yqox.vercel.app';
+// JD FX API. Verified FastAPI Cloud backend; credentials remain server-side.
+window.JD_FX_API_BASE = 'https://jd-fx-intelligence-c3b8b00d.fastapicloud.dev';
