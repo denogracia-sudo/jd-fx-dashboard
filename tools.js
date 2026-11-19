@@ -20,6 +20,20 @@
       clearTimeout(timer);
     }
   };
+  const callJson = async (path, method, body, timeoutMs=30000) => {
+    if (!API) throw new Error('API base URL is not configured.');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(API + path, {method,headers:{Accept:'application/json','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});
+      const data = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(data.detail || data.message || ('HTTP '+r.status));
+      return data;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Request timed out after '+Math.round(timeoutMs/1000)+' seconds.');
+      throw error;
+    } finally { clearTimeout(timer); }
+  };
   const nav = [
     ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],['swing','Swing & Position Radar','↗'],
     ['signals','Signals','↗'],['alerts','Alert Centre','◷'],['planning','Trade Planner','◎'],
@@ -64,7 +78,7 @@
       if(id==='signals') addPage(id,title,sub,
         '<div class="panel"><div class="panel-head"><div><h3>Signal stream</h3><div class="sub">Latest alert history and current scan signals.</div></div><button class="btn" id="signalsReload">Refresh</button></div><div id="signalsResults">'+empty('Loading signal history…')+'</div></div>');
       if(id==='paper') addPage(id,title,sub,
-        '<div class="notice">Paper trades are stored only in this browser. Quotes are provider snapshots, not tick-by-tick streaming. This does not place real orders.</div><div class="panel"><h3>Open a simulated position</h3><div class="formgrid"><div><label>Symbol</label><select class="field" id="paperSymbol"><option>EURUSD</option><option>GBPUSD</option><option>USDJPY</option><option>USDCAD</option><option>XAUUSD</option><option>BTCUSD</option><option>ETHUSD</option></select></div><div><label>Side</label><select class="field" id="paperSide"><option>BUY</option><option>SELL</option></select></div><div><label>Entry price</label><input class="field" id="paperEntry" type="number" step="any" placeholder="Enter fill price"></div><div><label>Units (not lots)</label><input class="field" id="paperUnits" type="number" min="0.000001" step="any" value="1"></div><div><label>Stop loss (optional)</label><input class="field" id="paperStop" type="number" step="any"></div><div><label>Take profit (optional)</label><input class="field" id="paperTarget" type="number" step="any"></div></div><div class="row" style="margin-top:12px"><button class="btn primary" id="paperOpen">Save paper trade</button><button class="btn" id="paperRefresh">Refresh quotes</button></div></div><div class="panel"><div class="panel-head"><div><h3>Paper portfolio</h3><div class="sub" id="paperQuoteStatus">Quote status not checked.</div></div></div><div id="paperTrades">'+empty('No simulated positions yet.')+'</div></div>');
+        '<div class="notice">Persistent simulation ledger · quote-driven mark-to-market · automatic stop-loss and take-profit exits. Simulation only; no broker orders. P/L is shown in quote-currency price units, not account-currency cash.</div><div class="panel"><div class="panel-head"><div><h3>Open simulated position</h3><div class="sub">Market entry uses the latest available provider quote. An optional entry override is for historical/manual test scenarios.</div></div><span class="tag">PAPER ENGINE</span></div><div class="formgrid"><div><label>Market</label><select class="field" id="paperSymbol"><option>EURUSD</option><option>GBPUSD</option><option>USDJPY</option><option>AUDUSD</option><option>USDCAD</option><option>USDCHF</option><option>XAUUSD</option><option>BTCUSD</option><option>ETHUSD</option><option>SOLUSD</option><option>SPX500</option><option>NDX100</option><option>DJI</option><option>DXY</option></select></div><div><label>Direction</label><select class="field" id="paperSide"><option>BUY</option><option>SELL</option></select></div><div><label>Units</label><input class="field" id="paperUnits" type="number" min="0.000001" step="any" value="1"></div><div><label>Entry override (optional)</label><input class="field" id="paperEntry" type="number" step="any" placeholder="Use live quote"></div><div><label>Stop loss (optional)</label><input class="field" id="paperStop" type="number" step="any"></div><div><label>Take profit (optional)</label><input class="field" id="paperTarget" type="number" step="any"></div></div><div class="row" style="margin-top:12px"><button class="btn primary" id="paperOpen">Open simulation</button><button class="btn" id="paperRefresh">Refresh & manage open trades</button></div><p class="sub" id="paperQuoteStatus">Waiting for market quote.</p></div><div class="metrics"><div class="metric"><div class="label">Open positions</div><div class="value" id="paperOpenCount">—</div></div><div class="metric"><div class="label">Closed positions</div><div class="value" id="paperClosedCount">—</div></div><div class="metric"><div class="label">Win rate</div><div class="value" id="paperWinRate">—</div></div><div class="metric"><div class="label">Realized P/L</div><div class="value" id="paperRealized">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Simulation ledger</h3><div class="sub">Saved on the server and shared across your devices.</div></div><span class="tag" id="paperEngineState">ENGINE IDLE</span></div><div id="paperTrades">'+empty('Loading persistent simulation ledger…')+'</div></div>');
       if(id==='backtest') addPage(id,title,sub,
         '<div class="notice">The performance report tracks qualified-alert outcomes. The CSV backtest below runs an EMA crossover strategy on historical OHLC data you supply. Results are historical simulations, not forecasts; costs and execution assumptions matter.</div><div class="panel"><h3>Run an EMA crossover backtest</h3><p class="sub">Upload an OHLC CSV with datetime, open, high, low and close columns. The file is sent to the JD FX API for analysis and is not saved by this dashboard.</p><div class="formgrid"><div><label>Historical OHLC CSV</label><input class="field" id="btFile" type="file" accept=".csv,text/csv"></div><div><label>Fast EMA</label><input class="field" id="btFast" type="number" min="2" max="200" value="20"></div><div><label>Slow EMA</label><input class="field" id="btSlow" type="number" min="3" max="500" value="50"></div><div><label>Trading cost (basis points)</label><input class="field" id="btCost" type="number" min="0" max="1000" step="0.1" value="2"></div></div><button class="btn primary" id="btRun" style="margin-top:12px">Run historical backtest</button><div id="btResult" style="margin-top:12px"></div></div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Losses</div><div class="value" id="perfLosses">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
       if(id==='news') addPage(id,title,sub,
@@ -183,23 +197,42 @@
       el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Release</th><th>Country</th><th>Series</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.date||x.release_date||x.datetime)+'</td><td>'+esc(x.name||x.title||x.release_name)+'</td><td>'+esc(x.country||'US')+'</td><td>'+esc(x.series_id||x.id||'FRED')+'</td></tr>').join('')+'</tbody></table></div>':empty('No upcoming FRED releases returned. Check FRED_API_KEY configuration and endpoint availability.');
     }catch(e){showError('calendarFeed',e);}
   }
-  const paperKey='jdFxPaperTradesV1';
-  function paperTrades(){try{return JSON.parse(localStorage.getItem(paperKey)||'[]')}catch{return[]}}
-  function savePaper(rows){localStorage.setItem(paperKey,JSON.stringify(rows));}
-  function openPaperTrade(){
-    const symbol=$('paperSymbol').value,side=$('paperSide').value,entry=Number($('paperEntry').value),units=Number($('paperUnits').value),stop=$('paperStop').value?Number($('paperStop').value):null,target=$('paperTarget').value?Number($('paperTarget').value):null;
-    if(!(entry>0&&units>0)){alert('Enter a valid entry price and positive units.');return;}
-    if(stop!=null&&((side==='BUY'&&stop>=entry)||(side==='SELL'&&stop<=entry))){alert('Stop loss must be below entry for BUY and above entry for SELL.');return;}
-    if(target!=null&&((side==='BUY'&&target<=entry)||(side==='SELL'&&target>=entry))){alert('Take profit must be above entry for BUY and below entry for SELL.');return;}
-    const rows=paperTrades();rows.unshift({id:Date.now().toString(),symbol,side,entry,units,stop,target,opened_at:new Date().toISOString(),status:'OPEN'});savePaper(rows);loadPaperTrades();$('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';
+  async function openPaperTrade(){
+    const symbol=$('paperSymbol').value,side=$('paperSide').value,units=Number($('paperUnits').value);
+    const entry=$('paperEntry').value.trim(),stop=$('paperStop').value.trim(),target=$('paperTarget').value.trim();
+    if(!(units>0)){alert('Enter a positive unit size.');return;}
+    try{
+      $('paperQuoteStatus').textContent='Submitting simulation to the server…';
+      await callJson('/paper/trades','POST',{symbol,side,units,entry_price:entry?Number(entry):null,stop_loss:stop?Number(stop):null,take_profit:target?Number(target):null});
+      $('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';
+      await loadPaperTrades();
+      $('paperQuoteStatus').textContent='Simulation opened and saved to the persistent ledger.';
+    }catch(e){$('paperQuoteStatus').textContent='Could not open simulation: '+e.message;}
   }
-  function closePaperTrade(id){const rows=paperTrades();const t=rows.find(x=>x.id===id);if(!t)return;const exit=Number(prompt('Enter simulated exit price:'));if(!(exit>0))return;t.exit=exit;t.closed_at=new Date().toISOString();t.status='CLOSED';t.pnl=(exit-t.entry)*t.units*(t.side==='BUY'?1:-1);savePaper(rows);loadPaperTrades();}
-  function loadPaperTrades(){
-    const rows=paperTrades();const el=$('paperTrades');if(!el)return;
-    el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Pair</th><th>Side</th><th>Entry</th><th>Units</th><th>Stop</th><th>Target</th><th>Status</th><th>P/L (price units)</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.symbol)+'</td><td>'+esc(x.side)+'</td><td>'+fmt(x.entry,5)+'</td><td>'+fmt(x.units,4)+'</td><td>'+fmt(x.stop,5)+'</td><td>'+fmt(x.target,5)+'</td><td>'+esc(x.status)+'</td><td>'+fmt(x.pnl,5)+'</td><td>'+(x.status==='OPEN'?'<button class="small-action" data-paper-close="'+esc(x.id)+'">Close</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No simulated positions yet. Open a paper trade above.</div>';
+  async function closePaperTrade(id){
+    if(!confirm('Close this simulated position at the latest available quote?'))return;
+    try{await callJson('/paper/trades/'+encodeURIComponent(id)+'/close','POST',{});await loadPaperTrades();}
+    catch(e){$('paperQuoteStatus').textContent='Could not close simulation: '+e.message;}
   }
-  async function loadPaperQuotes(){
-    try{const d=await call('/market/quotes?symbols=EURUSD,GBPUSD,USDJPY,USDCAD,XAUUSD,BTCUSD,ETHUSD');const q=d.quotes||[];$('paperQuoteStatus').textContent=q.length+' quote snapshots returned · '+new Date().toLocaleTimeString();}catch(e){$('paperQuoteStatus').textContent='Quotes unavailable: '+e.message;}
+  async function loadPaperTrades(){
+    const el=$('paperTrades');if(!el)return;
+    el.innerHTML=empty('Refreshing live marks and checking stop/target levels…');
+    try{
+      const d=await call('/paper/trades?refresh=true',60000),rows=d.trades||[],refresh=d.refresh||{};
+      const open=rows.filter(x=>x.status==='OPEN'),closed=rows.filter(x=>x.status==='CLOSED');
+      const perf=await call('/paper/performance?refresh=false',30000).catch(()=>({}));
+      $('paperOpenCount').textContent=open.length;$('paperClosedCount').textContent=closed.length;
+      $('paperWinRate').textContent=perf.win_rate_pct==null?'—':fmt(perf.win_rate_pct,1)+'%';
+      $('paperRealized').textContent=fmt(perf.realized_pnl_price_units,5);
+      $('paperEngineState').textContent=refresh.quote_errors?.length?'PARTIAL QUOTES':(refresh.auto_closed?'AUTO EXIT '+refresh.auto_closed:'ENGINE LIVE');
+      $('paperQuoteStatus').textContent=refresh.updated+' open positions refreshed · '+refresh.auto_closed+' auto-closed · '+(refresh.quote_errors?.length||0)+' quote errors · '+new Date().toLocaleTimeString();
+      el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Mark / Exit</th><th>Units</th><th>Stop</th><th>Target</th><th>Unrealized</th><th>Realized</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.map(x=>{
+        const pnl=x.status==='OPEN'?x.unrealized_pnl:x.realized_pnl;
+        const price=x.status==='OPEN'?x.current_price:x.exit_price;
+        return '<tr><td>'+esc(x.symbol)+'</td><td>'+esc(x.side)+'</td><td>'+fmt(x.entry_price,6)+'</td><td>'+fmt(price,6)+'</td><td>'+fmt(x.units,3)+'</td><td>'+fmt(x.stop_loss,6)+'</td><td>'+fmt(x.take_profit,6)+'</td><td>'+ (x.status==='OPEN'?fmt(pnl,5):'—')+'</td><td>'+ (x.status==='CLOSED'?fmt(pnl,5):'—')+'</td><td>'+esc(x.status)+(x.close_reason?' · '+esc(x.close_reason):'')+(x.last_quote_error?' · quote unavailable':'')+'</td><td>'+(x.status==='OPEN'?'<button class="small-action" data-paper-close="'+esc(x.id)+'">Close at quote</button>':'')+'</td></tr>';
+      }).join('')+'</tbody></table></div>':'<div class="empty">No simulated positions yet. Open your first position above.</div>';
+    }catch(e){showError('paperTrades',e);$('paperQuoteStatus').textContent='Simulation engine unavailable: '+e.message;}
   }
+  async function loadPaperQuotes(){await loadPaperTrades();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
