@@ -106,7 +106,7 @@
       if(!symbols.length||symbols.length>14||new Set(symbols).size!==symbols.length||frames.length<2||frames.length>4){
         el.innerHTML=empty('Use 1–14 unique supported markets and 2–4 timeframes. Leave symbols blank to scan all markets.');return;
       }
-      const batches=[];for(let i=0;i<symbols.length;i+=8)batches.push(symbols.slice(i,i+8));
+      const batches=[];for(let i=0;i<symbols.length;i+=4)batches.push(symbols.slice(i,i+4));
       const rows=[],meta=[];
       for(let i=0;i<batches.length;i++){
         el.innerHTML=empty('Running analysis batch '+(i+1)+'/'+batches.length+' · '+symbols.length+' markets · '+frames.join(' / '));
@@ -136,7 +136,7 @@
         el.innerHTML=empty('Enter 1–14 unique supported symbols, or leave the field blank to scan the full catalogue.');return;
       }
       const batches=[];
-      for(let i=0;i<symbols.length;i+=8)batches.push(symbols.slice(i,i+8));
+      for(let i=0;i<symbols.length;i+=4)batches.push(symbols.slice(i,i+4));
       const rows=[];
       for(let i=0;i<batches.length;i++){
         el.innerHTML=empty('Scanning market batch '+(i+1)+' of '+batches.length+' · '+symbols.length+' instruments · '+(horizon==='weekly'?'1–3 weeks':'2–5 trading days')+'…');
@@ -200,7 +200,7 @@
   async function loadCalendar(){
     const el=$('calendarFeed');el.innerHTML=empty('Loading releases…');
     try{const d=await call('/calendar?days=14');const rows=d.events||d.releases||d.results||[];
-      el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Release</th><th>Country</th><th>Series</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.date||x.release_date||x.datetime)+'</td><td>'+esc(x.name||x.title||x.release_name)+'</td><td>'+esc(x.country||'US')+'</td><td>'+esc(x.series_id||x.id||'FRED')+'</td></tr>').join('')+'</tbody></table></div>':empty('No upcoming FRED releases returned. Check FRED_API_KEY configuration and endpoint availability.');
+      el.innerHTML=d.status==='not_configured'?empty('Economic calendar API is online, but FRED_API_KEY is not configured on the server. No release data will be fabricated.'):rows.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Release</th><th>Country</th><th>Series</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.date||x.release_date||x.datetime)+'</td><td>'+esc(x.name||x.title||x.release_name)+'</td><td>'+esc(x.country||'US')+'</td><td>'+esc(x.series_id||x.id||'FRED')+'</td></tr>').join('')+'</tbody></table></div>':empty('The calendar returned no upcoming releases for this period.');
     }catch(e){showError('calendarFeed',e);}
   }
   async function openPaperTrade(){
