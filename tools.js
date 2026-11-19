@@ -74,7 +74,7 @@
       if(id==='swing') addPage(id,title,sub,
         '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Leave symbols blank to scan all 14 supported instruments, or enter a custom list. Requires completed daily and weekly candles with aligned direction. Targets are 2R, 3R and 4R projections, not promises. Target-specific historical validation is not yet available. No orders or notifications are sent from this scanner.</p></div><div id="swingResults">'+empty('Run the scanner to rank multi-day and weekly candidates.')+'</div>');
       if(id==='algo') addPage(id,title,sub,
-        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="" placeholder="All 14 supported markets (or enter symbols)" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
       if(id==='signals') addPage(id,title,sub,
         '<div class="panel"><div class="panel-head"><div><h3>Signal stream</h3><div class="sub">Latest alert history and current scan signals.</div></div><button class="btn" id="signalsReload">Refresh</button></div><div id="signalsResults">'+empty('Loading signal history…')+'</div></div>');
       if(id==='paper') addPage(id,title,sub,
@@ -98,20 +98,26 @@
   function empty(s){return '<div class="live-empty">'+esc(s)+'</div>';}
   function showError(id,e){const el=$(id);if(el)el.innerHTML=empty('Could not load data: '+(e.message||e));}
   async function scanAlgo(){
-    const el=$('algoResults'); el.innerHTML=empty('Scanning instruments and timeframes…');
-    const symbols=$('algoSymbols').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,8);
-    const frames=$('algoFrames').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,4);
-    if(symbols.length<1||frames.length<2){el.innerHTML=empty('Enter 1–8 symbols and 2–4 timeframes.');return;}
+    const el=$('algoResults');el.innerHTML=empty('Preparing the full market universe…');
+    const raw=$('algoSymbols').value.trim(),frames=$('algoFrames').value.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
     try{
-      const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols.join(','))+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
-      const rows=d.results||d.signals||d.items||[];
-      if(!rows.length){el.innerHTML=empty('No scan results were returned. Check the API response and provider availability.');return;}
-      el.innerHTML='<div class="panel"><div class="sub">Completed in '+fmt((d.scan_duration_ms||0)/1000,1)+'s · '+fmt(d.scan_workers||0,0)+' bounded concurrent workers · provider latency is reported per timeframe.</div><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Primary TF</th><th>Direction</th><th>Confluence</th><th>TF agreement</th><th>Alert status</th><th>Reference entry</th><th>Stop</th><th>TP1</th></tr></thead><tbody>'+rows.map(x=>{
-        const plan=x.entry_plan||{};
-        const direction=x.alert?.side||'NO_TRADE';
-        const status=x.alert?.status||x.status||'—';
-        return '<tr><td>'+esc(x.symbol||x.instrument_id)+'</td><td>'+esc(x.timeframe||'—')+'</td><td>'+esc(direction)+'</td><td>'+fmt(x.confidence_score,1)+'</td><td>'+fmt(x.timeframe_agreement_pct,1)+'%</td><td>'+esc(status)+'</td><td>'+fmt(plan.reference_entry,5)+'</td><td>'+fmt(plan.stop_loss,5)+'</td><td>'+fmt(plan.take_profit_1,5)+'</td></tr>';
-      }).join('')+'</tbody></table></div></div><div class="panel"><div class="sub">Raw response for transparency</div><pre class="jd-json">'+esc(JSON.stringify(d,null,2))+'</pre></div>';
+      let symbols=raw?raw.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean):[];
+      if(!raw){const catalogue=await call('/instruments');symbols=(catalogue.instruments||[]).map(x=>x.id||x.canonical).filter(Boolean);}
+      if(!symbols.length||symbols.length>14||new Set(symbols).size!==symbols.length||frames.length<2||frames.length>4){
+        el.innerHTML=empty('Use 1–14 unique supported markets and 2–4 timeframes. Leave symbols blank to scan all markets.');return;
+      }
+      const batches=[];for(let i=0;i<symbols.length;i+=8)batches.push(symbols.slice(i,i+8));
+      const rows=[],meta=[];
+      for(let i=0;i<batches.length;i++){
+        el.innerHTML=empty('Running analysis batch '+(i+1)+'/'+batches.length+' · '+symbols.length+' markets · '+frames.join(' / '));
+        const d=await call('/algo/scan?symbols='+encodeURIComponent(batches[i].join(','))+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
+        rows.push(...(d.results||[]));meta.push({duration:d.scan_duration_ms||0,workers:d.scan_workers||0});
+      }
+      const ok=rows.filter(x=>x.status==='ok').length,failed=rows.length-ok;
+      el.innerHTML='<div class="panel"><div class="panel-head"><div><h3>Multi-market analysis</h3><div class="sub">'+symbols.length+' instruments · '+frames.length+' timeframes · '+ok+' analyzed · '+failed+' unavailable · '+fmt(meta.reduce((n,x)=>n+x.duration,0)/1000,1)+'s aggregate provider time</div></div><span class="tag">'+(failed?'PARTIAL COVERAGE':'FULL COVERAGE')+'</span></div><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Asset class</th><th>Primary TF</th><th>Direction</th><th>Confluence</th><th>TF agreement</th><th>Evidence</th><th>Entry</th><th>Stop</th><th>TP1</th></tr></thead><tbody>'+rows.map(x=>{
+        const plan=x.entry_plan||{},direction=x.alert?.side||'NO_TRADE',status=x.alert?.status||x.status||'—';
+        return '<tr><td>'+esc(x.symbol||x.instrument_id)+'</td><td>'+esc(x.asset_class||'—')+'</td><td>'+esc(x.timeframe||frames[0])+'</td><td>'+esc(direction)+'</td><td>'+fmt(x.confidence_score,1)+'</td><td>'+fmt(x.timeframe_agreement_pct,1)+'%</td><td>'+esc(status)+'</td><td>'+fmt(plan.reference_entry,6)+'</td><td>'+fmt(plan.stop_loss,6)+'</td><td>'+fmt(plan.take_profit_1,6)+'</td></tr>';
+      }).join('')+'</tbody></table></div></div><div class="panel"><div class="sub">Transparent engine output · stale or unavailable candles never become positive signals.</div><pre class="jd-json">'+esc(JSON.stringify({symbols,timeframes:frames,results:rows},null,2))+'</pre></div>';
     }catch(e){showError('algoResults',e);}
   }
   async function scanSwing(){
