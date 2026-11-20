@@ -68,21 +68,36 @@
   function empty(s){return '<div class="live-empty">'+esc(s)+'</div>';}
   function showError(id,e){const el=$(id);if(el)el.innerHTML=empty('Could not load data: '+(e.message||e));}
   async function scanAlgo(){
-    const el=$('algoResults'); el.innerHTML=empty('Scanning instruments and timeframes…');
-    const symbols=$('algoSymbols').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,8);
+    const el=$('algoResults'), btn=$('algoRun');
+    const symbols=$('algoSymbols').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean).slice(0,8);
     const frames=$('algoFrames').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,4);
     if(symbols.length<1||frames.length<2){el.innerHTML=empty('Enter 1–8 symbols and 2–4 timeframes.');return;}
+    btn.disabled=true;btn.textContent='Scanning…';
+    const allRows=[],failures=[];
+    const render=()=>{
+      const cards=allRows.map(x=>{
+        const p=x.entry_plan||{},a=x.alert||{},side=a.side||'NO_TRADE',status=a.status||x.status||'—';
+        const tf=x.timeframe||'—';
+        const cls=side==='BUY'?'buy':side==='SELL'?'sell':'watch';
+        const levels=['reference_entry','stop_loss','take_profit_1'].map(k=>p[k]);
+        return '<article class="live-card" style="margin:12px 0"><div class="live-card-top"><strong>'+esc(x.symbol||x.instrument_id||'Instrument')+' · '+esc(tf)+'</strong><span class="signal '+cls+'">'+esc(side+' · '+String(status).replaceAll('_',' '))+'</span></div><div class="live-meta"><span>Confluence</span><b>'+fmt(x.confidence_score,1)+'</b></div><div class="live-meta"><span>Timeframe alignment</span><b>'+fmt(x.timeframe_agreement_pct,1)+'%</b></div><div class="live-meta"><span>Reference entry</span><b>'+fmt(levels[0],5)+'</b></div><div class="live-meta"><span>Stop loss</span><b>'+fmt(levels[1],5)+'</b></div><div class="live-meta"><span>TP1</span><b>'+fmt(levels[2],5)+'</b></div><p class="sub">'+esc(a.message||'Research candidate; check freshness and risk.')+'</p><p class="sub">Signal candle: '+esc(a.signal_candle_utc||'—')+'</p></article>';
+      }).join('');
+      const errorHtml=failures.length?'<div class="notice">Failed scans: '+failures.map(x=>esc(x.symbol)+' — '+esc(x.reason)).join(' · ')+'</div>':'';
+      el.innerHTML='<div class="sub">Completed '+allRows.length+' result rows across '+symbols.length+' requested instruments. Results are displayed as they arrive.</div>'+cards+errorHtml+(allRows.length?'':'<div class="live-empty">No candidate rows returned yet. Failures and progress are shown above.</div>');
+    };
+    el.innerHTML=empty('Starting scan for '+symbols.length+' instruments…');
     try{
-      const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols.join(','))+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
-      const rows=d.results||d.signals||d.items||[];
-      if(!rows.length){el.innerHTML=empty('No scan results were returned. Check the API response and provider availability.');return;}
-      el.innerHTML='<div class="panel"><div class="sub">Completed in '+fmt((d.scan_duration_ms||0)/1000,1)+'s · '+fmt(d.scan_workers||0,0)+' bounded concurrent workers · provider latency is reported per timeframe.</div><div class="tablewrap"><table><thead><tr><th>Instrument</th><th>Primary TF</th><th>Direction</th><th>Confluence</th><th>TF agreement</th><th>Alert status</th><th>Reference entry</th><th>Stop</th><th>TP1</th></tr></thead><tbody>'+rows.map(x=>{
-        const plan=x.entry_plan||{};
-        const direction=x.alert?.side||'NO_TRADE';
-        const status=x.alert?.status||x.status||'—';
-        return '<tr><td>'+esc(x.symbol||x.instrument_id)+'</td><td>'+esc(x.timeframe||'—')+'</td><td>'+esc(direction)+'</td><td>'+fmt(x.confidence_score,1)+'</td><td>'+fmt(x.timeframe_agreement_pct,1)+'%</td><td>'+esc(status)+'</td><td>'+fmt(plan.reference_entry,5)+'</td><td>'+fmt(plan.stop_loss,5)+'</td><td>'+fmt(plan.take_profit_1,5)+'</td></tr>';
-      }).join('')+'</tbody></table></div></div><div class="panel"><div class="sub">Raw response for transparency</div><pre class="jd-json">'+esc(JSON.stringify(d,null,2))+'</pre></div>';
-    }catch(e){showError('algoResults',e);}
+      for(let i=0;i<symbols.length;i++){
+        el.insertAdjacentHTML('afterbegin',empty('Scanning '+symbols[i]+' ('+(i+1)+'/'+symbols.length+')…'));
+        try{
+          const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols[i])+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
+          const rows=d.results||d.signals||d.items||[];
+          if(rows.length) allRows.push(...rows); else failures.push({symbol:symbols[i],reason:'API returned no rows'});
+        }catch(e){failures.push({symbol:symbols[i],reason:e.message||'request failed'});}
+        render();
+      }
+      el.insertAdjacentHTML('afterbegin',empty('Scan finished · '+allRows.length+' result rows · '+failures.length+' instrument failures.'));
+    }finally{btn.disabled=false;btn.textContent='Run opportunity scan';}
   }
   async function scanSwing(){
     const el=$('swingResults');
