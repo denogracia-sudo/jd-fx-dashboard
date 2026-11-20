@@ -53,7 +53,7 @@
     });
     pages.forEach(([id,title,sub])=>{
       if(id==='algo') addPage(id,title,sub,
-        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run opportunity scan</button></div><p class="sub">One scan workspace for short-term and higher-timeframe setups. Scores are evidence rankings, not probabilities of profit. Only fresh provider candles are eligible.</p></div><div id="algoResults">'+empty('Run the scan to retrieve current multi-timeframe opportunities.')+'</div><div class="panel" style="margin-top:16px"><h3>Swing &amp; Position Opportunities</h3><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Blank symbols scans the supported universe. Daily and weekly candle alignment is required for qualification. 2R, 3R and 4R are projections, not promises.</p><div id="swingResults">'+empty('Run the swing scan to rank multi-day and weekly candidates.')+'</div></div>');
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="" placeholder="All 14 supported markets, or enter symbols" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run opportunity scan</button></div><p class="sub">One scan workspace for short-term and higher-timeframe setups. Scores are evidence rankings, not probabilities of profit. Only fresh provider candles are eligible.</p></div><div id="algoResults">'+empty('Run the scan to retrieve current multi-timeframe opportunities.')+'</div><div class="panel" style="margin-top:16px"><h3>Swing &amp; Position Opportunities</h3><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Blank symbols scans the supported universe. Daily and weekly candle alignment is required for qualification. 2R, 3R and 4R are projections, not promises.</p><div id="swingResults">'+empty('Run the swing scan to rank multi-day and weekly candidates.')+'</div></div>');
       if(id==='backtest') addPage(id,title,sub,
         '<div class="notice">No file uploads are required. The performance report below uses resolved JD FX alert outcomes only. Automated strategy backtesting against verified historical market candles is not yet connected, so this page will not generate simulated results from missing or invented data.</div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Losses</div><div class="value" id="perfLosses">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
       if(id==='context') addPage(id,title,sub,
@@ -69,10 +69,19 @@
   function showError(id,e){const el=$(id);if(el)el.innerHTML=empty('Could not load data: '+(e.message||e));}
   async function scanAlgo(){
     const el=$('algoResults'), btn=$('algoRun');
-    const symbols=$('algoSymbols').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean).slice(0,8);
-    const frames=$('algoFrames').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,4);
-    if(symbols.length<1||frames.length<2){el.innerHTML=empty('Enter 1–8 symbols and 2–4 timeframes.');return;}
-    btn.disabled=true;btn.textContent='Scanning…';
+    let symbols=$('algoSymbols').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+    const frames=$('algoFrames').value.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean).slice(0,4);
+    if(frames.length<2){el.innerHTML=empty('Enter 2–4 supported timeframes.');return;}
+    if(new Set(symbols).size!==symbols.length){el.innerHTML=empty('Remove duplicate symbols before scanning.');return;}
+    btn.disabled=true;btn.textContent='Preparing scan…';
+    try{
+      if(!symbols.length){
+        const catalogue=await call('/instruments',30000);
+        symbols=(catalogue.instruments||[]).map(x=>x.id).filter(Boolean);
+      }
+    }catch(e){el.innerHTML=empty('Could not load the supported instrument catalogue: '+e.message);btn.disabled=false;btn.textContent='Run opportunity scan';return;}
+    if(symbols.length<1||symbols.length>14){el.innerHTML=empty('Scan 1–14 supported instruments, or leave symbols blank to scan the full 14-market catalogue.');btn.disabled=false;btn.textContent='Run opportunity scan';return;}
+    btn.textContent='Scanning 0/'+symbols.length+'…';
     const allRows=[],failures=[];
     const render=()=>{
       const cards=allRows.map(x=>{
@@ -88,6 +97,7 @@
     el.innerHTML=empty('Starting scan for '+symbols.length+' instruments…');
     try{
       for(let i=0;i<symbols.length;i++){
+        btn.textContent='Scanning '+(i+1)+'/'+symbols.length+'…';
         el.insertAdjacentHTML('afterbegin',empty('Scanning '+symbols[i]+' ('+(i+1)+'/'+symbols.length+')…'));
         try{
           const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols[i])+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
