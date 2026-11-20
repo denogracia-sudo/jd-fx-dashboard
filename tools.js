@@ -55,14 +55,14 @@
       if(id==='algo') addPage(id,title,sub,
         '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="" placeholder="All 14 supported markets, or enter symbols" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run opportunity scan</button></div><p class="sub">One scan workspace for short-term and higher-timeframe setups. Scores are evidence rankings, not probabilities of profit. Only fresh provider candles are eligible.</p></div><div id="algoResults">'+empty('Run the scan to retrieve current multi-timeframe opportunities.')+'</div><div class="panel" style="margin-top:16px"><h3>Swing &amp; Position Opportunities</h3><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Blank symbols scans the supported universe. Daily and weekly candle alignment is required for qualification. 2R, 3R and 4R are projections, not promises.</p><div id="swingResults">'+empty('Run the swing scan to rank multi-day and weekly candidates.')+'</div></div>');
       if(id==='backtest') addPage(id,title,sub,
-        '<div class="notice">No file uploads are required. The performance report below uses resolved JD FX alert outcomes only. Automated strategy backtesting against verified historical market candles is not yet connected, so this page will not generate simulated results from missing or invented data.</div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Losses</div><div class="value" id="perfLosses">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
+        '<div class="panel"><div class="panel-head"><div><h3>Automatic historical strategy test</h3><div class="sub">Fetch completed market candles directly. No file selection or upload.</div></div></div><div class="live-toolbar"><label class="sub">Market <select id="marketBacktestSymbol" class="field"><option value="EURUSD">EUR/USD</option><option value="GBPUSD">GBP/USD</option><option value="USDJPY">USD/JPY</option><option value="AUDUSD">AUD/USD</option><option value="USDCAD">USD/CAD</option><option value="USDCHF">USD/CHF</option><option value="XAUUSD">Gold</option><option value="BTCUSD">Bitcoin</option><option value="ETHUSD">Ethereum</option><option value="SOLUSD">Solana</option><option value="SPX500">S&amp;P 500</option><option value="NDX100">Nasdaq 100</option><option value="DJI">Dow Jones</option><option value="DXY">US Dollar Index</option></select></label><label class="sub">Timeframe <select id="marketBacktestInterval" class="field"><option value="1d" selected>Daily</option><option value="1w">Weekly</option><option value="1h">1 hour</option><option value="30m">30 minutes</option><option value="15m">15 minutes</option><option value="5m">5 minutes</option></select></label><label class="sub">Historical candles <input id="marketBacktestSize" class="field" type="number" min="150" max="5000" value="500"></label><button class="btn primary" id="marketBacktestRun">Run historical test</button></div><p class="sub">Fixed EMA trend + EMA200 + RSI rules. Chronological holdout, stop-first same-candle handling and stated cost assumptions. Results are historical diagnostics, not forecasts or trade instructions.</p><div id="marketBacktestResults">'+empty('Choose a market and run the historical test. Stale or insufficient data will be reported, not replaced with invented results.')+'</div></div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Losses</div><div class="value" id="perfLosses">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
       if(id==='context') addPage(id,title,sub,
         '<div class="panel"><div class="panel-head"><div><h3>Market News</h3><div class="sub">Recent headlines to add context to active setups.</div></div><button class="btn" id="newsReload">Refresh news</button></div><div id="newsFeed">'+empty('Loading market headlines…')+'</div></div><div class="notice">Economic calendar coverage depends on configured FRED data and is not a complete global calendar.</div><div class="panel"><div class="panel-head"><div><h3>Economic Releases</h3><div class="sub">Upcoming scheduled releases</div></div><button class="btn" id="calendarReload">Refresh calendar</button></div><div id="calendarFeed">'+empty('Loading releases…')+'</div></div>');
     });
     const sideNote=sidebar.querySelector('.side-note');
     if(sideNote) sideNote.innerHTML='<b style="color:var(--gold)">Research mode</b><br>Manual decision support only. No broker execution or automated orders.';
     $('algoRun').onclick=scanAlgo; $('swingRun').onclick=scanSwing;
-    $('perfReload').onclick=loadPerformance; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar;
+    $('perfReload').onclick=loadPerformance; $('marketBacktestRun').onclick=runMarketBacktest; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar;
   }
   function switchPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));}
   function empty(s){return '<div class="live-empty">'+esc(s)+'</div>';}
@@ -181,6 +181,37 @@
       $('perfLosses').textContent=fmt(s.losses,0);
       $('perfRaw').textContent=JSON.stringify(d,null,2);
     }catch(e){$('perfRaw').textContent='Could not load performance report: '+e.message;}
+  }
+  async function runMarketBacktest(){
+    const el=$('marketBacktestResults'),btn=$('marketBacktestRun');
+    const symbol=$('marketBacktestSymbol').value;
+    const interval=$('marketBacktestInterval').value;
+    const outputsize=Math.max(150,Math.min(5000,Number($('marketBacktestSize').value)||500));
+    btn.disabled=true;btn.textContent='Fetching candles…';el.innerHTML=empty('Retrieving verified historical candles and evaluating the holdout…');
+    try{
+      const params=new URLSearchParams({symbol,interval,outputsize:String(outputsize)});
+      const d=await call('/strategy/evaluate/market?'+params.toString(),90000);
+      if(d.status==='stale_data'){
+        el.innerHTML='<div class="notice">Backtest withheld: '+esc(d.freshness?.reason||'The latest completed candle is stale.')+'</div>';
+        return;
+      }
+      if(d.status!=='ok'){
+        el.innerHTML='<div class="notice">Historical test status: '+esc(d.status||'unavailable')+'. '+esc(d.message||'No validated result was returned.')+'</div>';
+        return;
+      }
+      const s=d.out_of_sample||{},src=d.data_source||{},metrics=[
+        ['Resolved trades',fmt(s.resolved_trades,0)],
+        ['Win rate',fmt(s.win_rate_pct,1)+'%'],
+        ['Net expectancy',fmt(s.expectancy_net_r_per_trade,3)+'R'],
+        ['Profit factor',s.profit_factor===null?'—':esc(s.profit_factor)]
+      ];
+      const cards=metrics.map(x=>'<div class="metric"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div></div>').join('');
+      const log=(d.trade_log||[]).slice(-20).reverse();
+      const rows=log.map(t=>'<tr><td>'+esc(t.signal_time_utc||'')+'</td><td>'+esc(t.side||'')+'</td><td>'+esc(t.outcome||'')+'</td><td>'+fmt(t.net_r,2)+'R</td></tr>').join('');
+      const limitations=(d.interpretation?.limitations||[]).map(x=>'<li>'+esc(x)+'</li>').join('');
+      el.innerHTML='<div class="sub">Data: '+esc(src.provider||'unknown')+' · '+esc(src.candles_received||0)+' candles · '+esc(d.symbol||symbol)+' · '+esc(d.timeframe||interval)+' · Freshness: '+(d.freshness?.fresh?'fresh':'not verified')+'</div><div class="metrics">'+cards+'</div><div class="notice">'+esc(s.benchmark_status||'INSUFFICIENT_EVIDENCE')+' · '+esc(s.recommended_action||'Review only')+' · Minimum sample: '+fmt(s.minimum_trades_required,0)+' resolved trades</div><div class="tablewrap"><table><thead><tr><th>Signal time (UTC)</th><th>Side</th><th>Outcome</th><th>Net R</th></tr></thead><tbody>'+ (rows||'<tr><td colspan="4">No resolved historical trades in this sample.</td></tr>')+'</tbody></table></div><div class="sub">Only the latest 20 logged setups are shown. '+esc((d.warnings||[]).join(' '))+'</div>'+(limitations?'<ul class="sub">'+limitations+'</ul>':'');
+    }catch(e){el.innerHTML='<div class="notice">Historical test unavailable: '+esc(e.message||e)+'</div>';}
+    finally{btn.disabled=false;btn.textContent='Run historical test';}
   }
   async function loadNews(){
     const el=$('newsFeed');el.innerHTML=empty('Loading headlines…');
