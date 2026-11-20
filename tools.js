@@ -183,23 +183,23 @@
       el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Release</th><th>Country</th><th>Series</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.date||x.release_date||x.datetime)+'</td><td>'+esc(x.name||x.title||x.release_name)+'</td><td>'+esc(x.country||'US')+'</td><td>'+esc(x.series_id||x.id||'FRED')+'</td></tr>').join('')+'</tbody></table></div>':empty('No upcoming FRED releases returned. Check FRED_API_KEY configuration and endpoint availability.');
     }catch(e){showError('calendarFeed',e);}
   }
-  const paperKey='jdFxPaperTradesV1';
-  function paperTrades(){try{return JSON.parse(localStorage.getItem(paperKey)||'[]')}catch{return[]}}
-  function savePaper(rows){localStorage.setItem(paperKey,JSON.stringify(rows));}
-  function openPaperTrade(){
+  async function openPaperTrade(){
     const symbol=$('paperSymbol').value,side=$('paperSide').value,entry=Number($('paperEntry').value),units=Number($('paperUnits').value),stop=$('paperStop').value?Number($('paperStop').value):null,target=$('paperTarget').value?Number($('paperTarget').value):null;
     if(!(entry>0&&units>0)){alert('Enter a valid entry price and positive units.');return;}
     if(stop!=null&&((side==='BUY'&&stop>=entry)||(side==='SELL'&&stop<=entry))){alert('Stop loss must be below entry for BUY and above entry for SELL.');return;}
     if(target!=null&&((side==='BUY'&&target<=entry)||(side==='SELL'&&target>=entry))){alert('Take profit must be above entry for BUY and below entry for SELL.');return;}
-    const rows=paperTrades();rows.unshift({id:Date.now().toString(),symbol,side,entry,units,stop,target,opened_at:new Date().toISOString(),status:'OPEN'});savePaper(rows);loadPaperTrades();$('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';
+    try{const r=await fetch(API+'/paper/trades',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({symbol,side,entry_price:entry,units,stop_loss:stop,take_profit:target})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));await loadPaperTrades();$('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';}catch(e){alert('Could not save simulated trade: '+e.message);}
   }
-  function closePaperTrade(id){const rows=paperTrades();const t=rows.find(x=>x.id===id);if(!t)return;const exit=Number(prompt('Enter simulated exit price:'));if(!(exit>0))return;t.exit=exit;t.closed_at=new Date().toISOString();t.status='CLOSED';t.pnl=(exit-t.entry)*t.units*(t.side==='BUY'?1:-1);savePaper(rows);loadPaperTrades();}
-  function loadPaperTrades(){
-    const rows=paperTrades();const el=$('paperTrades');if(!el)return;
-    el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Pair</th><th>Side</th><th>Entry</th><th>Units</th><th>Stop</th><th>Target</th><th>Status</th><th>P/L (price units)</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.symbol)+'</td><td>'+esc(x.side)+'</td><td>'+fmt(x.entry,5)+'</td><td>'+fmt(x.units,4)+'</td><td>'+fmt(x.stop,5)+'</td><td>'+fmt(x.target,5)+'</td><td>'+esc(x.status)+'</td><td>'+fmt(x.pnl,5)+'</td><td>'+(x.status==='OPEN'?'<button class="small-action" data-paper-close="'+esc(x.id)+'">Close</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No simulated positions yet. Open a paper trade above.</div>';
+  async function closePaperTrade(id){
+    if(!confirm('Close this simulated position using the latest observed quote?'))return;
+    try{const r=await fetch(API+'/paper/trades/'+encodeURIComponent(id)+'/close',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));await loadPaperTrades();}catch(e){alert('Could not close simulated trade: '+e.message);}
   }
-  async function loadPaperQuotes(){
-    try{const d=await call('/market/quotes?symbols=EURUSD,GBPUSD,USDJPY,USDCAD,XAUUSD,BTCUSD,ETHUSD');const q=d.quotes||[];$('paperQuoteStatus').textContent=q.length+' quote snapshots returned · '+new Date().toLocaleTimeString();}catch(e){$('paperQuoteStatus').textContent='Quotes unavailable: '+e.message;}
+  async function loadPaperTrades(){
+    const el=$('paperTrades');if(!el)return;el.innerHTML=empty('Refreshing server-side paper ledger and monitoring open positions…');
+    try{const d=await call('/paper/trades?refresh=true',60000),rows=d.trades||[],update=d.refresh||{};$('paperQuoteStatus').textContent='Server ledger · '+rows.length+' trades · '+(update.auto_closed||0)+' auto-closed · '+(update.quote_errors||[]).length+' quote errors · '+new Date().toLocaleTimeString();
+      el.innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Pair</th><th>Side</th><th>Entry</th><th>Units</th><th>Stop</th><th>Target</th><th>Status</th><th>Unrealized / realized P&L</th><th>Close</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.symbol)+'</td><td>'+esc(x.side)+'</td><td>'+fmt(x.entry_price,5)+'</td><td>'+fmt(x.units,4)+'</td><td>'+fmt(x.stop_loss,5)+'</td><td>'+fmt(x.take_profit,5)+'</td><td>'+esc(x.status)+(x.close_reason?' · '+esc(x.close_reason):'')+'</td><td>'+fmt(x.status==='CLOSED'?x.realized_pnl:x.unrealized_pnl,5)+'</td><td>'+(x.status==='OPEN'?'<button class="small-action" data-paper-close="'+esc(x.id)+'">Close</button>':'—')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No simulated positions in the server ledger yet.</div>';
+    }catch(e){showError('paperTrades',e);$('paperQuoteStatus').textContent='Server ledger unavailable: '+e.message;}
   }
+  async function loadPaperQuotes(){try{const d=await call('/market/quotes?symbols=EURUSD,GBPUSD,USDJPY,USDCAD,XAUUSD,BTCUSD,ETHUSD');const q=d.quotes||[];$('paperQuoteStatus').textContent=q.length+' quote snapshots returned · '+new Date().toLocaleTimeString();}catch(e){$('paperQuoteStatus').textContent='Quotes unavailable: '+e.message;}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
