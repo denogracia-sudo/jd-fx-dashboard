@@ -21,16 +21,14 @@
     }
   };
   const nav = [
-    ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],['swing','Swing & Position Radar','↗'],
-    ['alerts','Opportunity Alerts','◷'],['planning','Trade Planner','◎'],['backtest','Performance','▤'],
-    ['news','Market News','▤'],['calendar','Economic Calendar','▦'],['settings','Settings','⚙']
+    ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','Opportunity Radar','⌖'],
+    ['alerts','Opportunity Alerts','◷'],['backtest','Performance','▤'],['context','Market Context','▦'],
+    ['settings','Settings','⚙']
   ];
   const pages = [
-    ['algo','AI Scanner','Multi-timeframe confluence scanner across the supported market universe.'],
-    ['swing','Swing & Position Radar','Ranked multi-day and weekly research candidates with wider risk-based targets.'],
-    ['backtest','Backtesting & Performance','Resolved signal outcomes and performance evidence from the API.'],
-    ['news','Market News','Recent headlines from the configured news aggregator.'],
-    ['calendar','Economic Calendar','Upcoming FRED releases when a FRED key is configured.']
+    ['algo','Opportunity Radar','One workspace for intraday, multi-timeframe, multi-day and weekly opportunities.'],
+    ['backtest','Performance','Resolved signal outcomes and evidence on historical signal quality.'],
+    ['context','Market Context','News and scheduled economic releases that may affect current opportunities.']
   ];
   function addPage(id,title,sub,body) {
     const main=document.querySelector('main');
@@ -49,21 +47,17 @@
       const n=document.createElement('div'); n.className='nav'+(id==='overview'?' active':'');
       n.dataset.page=id; n.tabIndex=0; n.setAttribute('role','button');
       n.innerHTML='<span class="ico">'+ico+'</span>'+label;
-      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='swing')scanSwing(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar();});
+      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo'){scanAlgo();scanSwing();} if(id==='backtest')loadPerformance(); if(id==='context'){loadNews();loadCalendar();}});
       n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click();}});
       sidebar.insertBefore(n,sidebar.querySelector('.side-note'));
     });
     pages.forEach(([id,title,sub])=>{
-      if(id==='swing') addPage(id,title,sub,
-        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Leave symbols blank to scan all 14 supported instruments, or enter a custom list. Requires completed daily and weekly candles with aligned direction. Targets are 2R, 3R and 4R projections, not promises. Target-specific historical validation is not yet available. No orders or notifications are sent from this scanner.</p></div><div id="swingResults">'+empty('Run the scanner to rank multi-day and weekly candidates.')+'</div>');
       if(id==='algo') addPage(id,title,sub,
-        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
+        '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run opportunity scan</button></div><p class="sub">One scan workspace for short-term and higher-timeframe setups. Scores are evidence rankings, not probabilities of profit. Only fresh provider candles are eligible.</p></div><div id="algoResults">'+empty('Run the scan to retrieve current multi-timeframe opportunities.')+'</div><div class="panel" style="margin-top:16px"><h3>Swing &amp; Position Opportunities</h3><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Blank symbols scans the supported universe. Daily and weekly candle alignment is required for qualification. 2R, 3R and 4R are projections, not promises.</p><div id="swingResults">'+empty('Run the swing scan to rank multi-day and weekly candidates.')+'</div></div>');
       if(id==='backtest') addPage(id,title,sub,
         '<div class="notice">No file uploads are required. The performance report below uses resolved JD FX alert outcomes only. Automated strategy backtesting against verified historical market candles is not yet connected, so this page will not generate simulated results from missing or invented data.</div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Losses</div><div class="value" id="perfLosses">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
-      if(id==='news') addPage(id,title,sub,
-        '<div class="panel"><div class="panel-head"><div><h3>Latest headlines</h3><div class="sub">Aggregated headlines; open publisher sources to assess context.</div></div><button class="btn" id="newsReload">Refresh news</button></div><div id="newsFeed">'+empty('Loading market headlines…')+'</div></div>');
-      if(id==='calendar') addPage(id,title,sub,
-        '<div class="notice">Calendar coverage depends on the FRED API key and FRED release schedule. This is not a complete global economic calendar and may not provide guaranteed release times or impact ratings.</div><div class="panel"><div class="panel-head"><div><h3>Upcoming economic releases</h3><div class="sub">Next 14 days</div></div><button class="btn" id="calendarReload">Refresh calendar</button></div><div id="calendarFeed">'+empty('Loading economic calendar…')+'</div></div>');
+      if(id==='context') addPage(id,title,sub,
+        '<div class="panel"><div class="panel-head"><div><h3>Market News</h3><div class="sub">Recent headlines to add context to active setups.</div></div><button class="btn" id="newsReload">Refresh news</button></div><div id="newsFeed">'+empty('Loading market headlines…')+'</div></div><div class="notice">Economic calendar coverage depends on configured FRED data and is not a complete global calendar.</div><div class="panel"><div class="panel-head"><div><h3>Economic Releases</h3><div class="sub">Upcoming scheduled releases</div></div><button class="btn" id="calendarReload">Refresh calendar</button></div><div id="calendarFeed">'+empty('Loading releases…')+'</div></div>');
     });
     const sideNote=sidebar.querySelector('.side-note');
     if(sideNote) sideNote.innerHTML='<b style="color:var(--gold)">Research mode</b><br>Manual decision support only. No broker execution or automated orders.';
