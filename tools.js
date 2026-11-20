@@ -22,15 +22,12 @@
   };
   const nav = [
     ['overview','Overview','◫'],['scanner','Live Charts','⌁'],['algo','AI Scanner','⌖'],['swing','Swing & Position Radar','↗'],
-    ['signals','Signals','↗'],['alerts','Alert Centre','◷'],['planning','Trade Planner','◎'],
-    ['paper','Paper Trading','▣'],['backtest','Backtesting & Performance','▤'],
+    ['alerts','Opportunity Alerts','◷'],['planning','Trade Planner','◎'],['backtest','Performance','▤'],
     ['news','Market News','▤'],['calendar','Economic Calendar','▦'],['settings','Settings','⚙']
   ];
   const pages = [
     ['algo','AI Scanner','Multi-timeframe confluence scanner across the supported market universe.'],
     ['swing','Swing & Position Radar','Ranked multi-day and weekly research candidates with wider risk-based targets.'],
-    ['signals','Signals','Current and historical research signals with transparent evidence.'],
-    ['paper','Paper Trading','Persistent server-side simulation ledger. No broker connection or real orders.'],
     ['backtest','Backtesting & Performance','Resolved signal outcomes and performance evidence from the API.'],
     ['news','Market News','Recent headlines from the configured news aggregator.'],
     ['calendar','Economic Calendar','Upcoming FRED releases when a FRED key is configured.']
@@ -52,7 +49,7 @@
       const n=document.createElement('div'); n.className='nav'+(id==='overview'?' active':'');
       n.dataset.page=id; n.tabIndex=0; n.setAttribute('role','button');
       n.innerHTML='<span class="ico">'+ico+'</span>'+label;
-      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='swing')scanSwing(); if(id==='signals')loadSignals(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar(); if(id==='paper')loadPaperQuotes();});
+      n.addEventListener('click',()=>{window.showPage ? window.showPage(id) : switchPage(id); if(id==='algo')scanAlgo(); if(id==='swing')scanSwing(); if(id==='backtest')loadPerformance(); if(id==='news')loadNews(); if(id==='calendar')loadCalendar();});
       n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click();}});
       sidebar.insertBefore(n,sidebar.querySelector('.side-note'));
     });
@@ -61,10 +58,6 @@
         '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="swingSymbols" class="field" value="" placeholder="All supported markets (or enter symbols)" aria-label="Swing scan symbols"></label><label class="sub">Holding horizon <select id="swingHorizon" class="field"><option value="multi_day">Multi-day · 2–5 trading days</option><option value="weekly">Weekly · 1–3 weeks</option></select></label><button class="btn primary" id="swingRun">Scan swing opportunities</button></div><p class="sub">Leave symbols blank to scan all 14 supported instruments, or enter a custom list. Requires completed daily and weekly candles with aligned direction. Targets are 2R, 3R and 4R projections, not promises. Target-specific historical validation is not yet available. No orders or notifications are sent from this scanner.</p></div><div id="swingResults">'+empty('Run the scanner to rank multi-day and weekly candidates.')+'</div>');
       if(id==='algo') addPage(id,title,sub,
         '<div class="panel"><div class="live-toolbar"><label class="sub">Symbols <input id="algoSymbols" class="field" value="EURUSD,GBPUSD,USDJPY,USDCAD,USDCHF,XAUUSD,BTCUSD,ETHUSD" aria-label="Symbols"></label><label class="sub">Timeframes <input id="algoFrames" class="field" value="15m,1h,4h" aria-label="Timeframes"></label><button class="btn primary" id="algoRun">Run multi-timeframe scan</button></div><p class="sub">The confluence score is a heuristic evidence score, not a probability of profit. Results require fresh provider candles. Larger scans may take up to 2 minutes; fetches run concurrently with bounded provider limits.</p></div><div id="algoResults">'+empty('Run the scanner to retrieve current multi-timeframe results.')+'</div>');
-      if(id==='signals') addPage(id,title,sub,
-        '<div class="panel"><div class="panel-head"><div><h3>Signal stream</h3><div class="sub">Latest alert history and current scan signals.</div></div><button class="btn" id="signalsReload">Refresh</button></div><div id="signalsResults">'+empty('Loading signal history…')+'</div></div>');
-      if(id==='paper') addPage(id,title,sub,
-        '<div class="notice">Paper trades are stored in the API ledger and shared across browser sessions. Quotes are provider snapshots, not tick-by-tick streaming. This does not place real orders.</div><div class="panel"><h3>Open a simulated position</h3><div class="formgrid"><div><label>Symbol</label><select class="field" id="paperSymbol"><option>EURUSD</option><option>GBPUSD</option><option>USDJPY</option><option>USDCAD</option><option>XAUUSD</option><option>BTCUSD</option><option>ETHUSD</option></select></div><div><label>Side</label><select class="field" id="paperSide"><option>BUY</option><option>SELL</option></select></div><div><label>Entry price</label><input class="field" id="paperEntry" type="number" step="any" placeholder="Enter fill price"></div><div><label>Units (not lots)</label><input class="field" id="paperUnits" type="number" min="0.000001" step="any" value="1"></div><div><label>Stop loss (optional)</label><input class="field" id="paperStop" type="number" step="any"></div><div><label>Take profit (optional)</label><input class="field" id="paperTarget" type="number" step="any"></div></div><div class="row" style="margin-top:12px"><button class="btn primary" id="paperOpen">Save paper trade</button><button class="btn" id="paperRefresh">Refresh quotes</button></div></div><div class="panel"><div class="panel-head"><div><h3>Paper portfolio</h3><div class="sub" id="paperQuoteStatus">Quote status not checked.</div></div></div><div id="paperTrades">'+empty('No simulated positions yet.')+'</div></div>');
       if(id==='backtest') addPage(id,title,sub,
         '<div class="notice">No file uploads are required. The performance report below uses resolved JD FX alert outcomes only. Automated strategy backtesting against verified historical market candles is not yet connected, so this page will not generate simulated results from missing or invented data.</div><div class="metrics"><div class="metric"><div class="label">Resolved trades</div><div class="value" id="perfResolved">—</div></div><div class="metric"><div class="label">Historical win rate</div><div class="value" id="perfWin">—</div></div><div class="metric"><div class="label">Expectancy</div><div class="value" id="perfExpectancy">—</div></div><div class="metric"><div class="label">Losses</div><div class="value" id="perfLosses">—</div></div></div><div class="panel"><div class="panel-head"><div><h3>Performance report</h3><div class="sub">Fetched from /algo/performance</div></div><button class="btn" id="perfReload">Refresh report</button></div><pre class="jd-json" id="perfRaw">'+esc('No report loaded.')+'</pre></div>');
       if(id==='news') addPage(id,title,sub,
@@ -74,11 +67,8 @@
     });
     const sideNote=sidebar.querySelector('.side-note');
     if(sideNote) sideNote.innerHTML='<b style="color:var(--gold)">Research mode</b><br>Manual decision support only. No broker execution or automated orders.';
-    $('algoRun').onclick=scanAlgo; $('swingRun').onclick=scanSwing; $('signalsReload').onclick=loadSignals;
-    $('paperOpen').onclick=openPaperTrade; $('paperRefresh').onclick=loadPaperQuotes;
+    $('algoRun').onclick=scanAlgo; $('swingRun').onclick=scanSwing;
     $('perfReload').onclick=loadPerformance; $('newsReload').onclick=loadNews; $('calendarReload').onclick=loadCalendar;
-    document.addEventListener('click',e=>{const b=e.target.closest('[data-paper-close]');if(b)closePaperTrade(b.dataset.paperClose);});
-    loadPaperTrades();
   }
   function switchPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));}
   function empty(s){return '<div class="live-empty">'+esc(s)+'</div>';}
