@@ -59,9 +59,46 @@
  .radar-panel .live-card{padding:10px}
  .radar-panel .live-card strong{font-size:13px}
 }
+
+/* Supabase sign-in gate and role-specific access. */
+.app{display:none}
+.auth-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 50% 0%,#1b3456,transparent 55%),var(--bg)}
+.auth-card{width:min(460px,100%);padding:28px;border:1px solid var(--line);border-radius:18px;background:#142541;box-shadow:0 24px 70px #0006}
+.auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.auth-brand .logo{flex:0 0 44px}
+.auth-card h2{font-size:24px;margin:0 0 6px}
+.auth-card p{color:var(--muted);font-size:13px;margin:0 0 18px}
+.auth-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:18px 0}
+.auth-mode-switch button{border:1px solid var(--line);background:#0b1730;color:var(--muted);padding:10px;border-radius:9px;cursor:pointer}
+.auth-mode-switch button.active{background:#203b60;color:var(--cream);border-color:var(--gold)}
+.auth-card label{display:block;color:var(--muted);font-size:11px;margin:12px 0 6px}
+.auth-card input{width:100%;background:#0b1730;color:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px}
+.auth-card button.full{width:100%;margin-top:12px}
+.auth-google{background:#e8eef7!important;color:#0b1730!important;border-color:#e8eef7!important;font-weight:700}
+.auth-link{display:block;width:100%;border:0;background:transparent;color:var(--gold);padding:10px;cursor:pointer}
+.auth-message{min-height:20px;color:var(--gold);font-size:12px;margin-top:12px}
+.auth-note{font-size:11px;color:var(--muted);margin-top:10px}
+#adminDiagnostics{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1730;border:1px solid var(--line);border-radius:9px;padding:13px;font-size:11px;color:var(--cream)}
 </style><link rel="stylesheet" href="./tools.css">
-</head><body><div class="app">
-<header class="top"><div class="brand"><div class="logo">JD</div><div><h1>JD FX INTELLIGENCE</h1><p>Independent market research · Trader intelligence</p></div></div><div class="topright"><span class="pill" id="apiStatus">Connecting…</span><button class="btn" id="refresh">↻ Refresh</button></div></header>
+</head><body><div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-brand"><div class="logo">JD</div><div><b>JD FX INTELLIGENCE</b><div class="sub">Secure market research workspace</div></div></div>
+    <h2 id="authTitle">Welcome back</h2><p id="authSubtitle">Sign in to continue to your workspace.</p>
+    <div class="auth-mode-switch"><button type="button" data-auth-mode="client" class="active" id="clientMode">Client login</button><button type="button" data-auth-mode="admin" id="adminMode">Admin login</button></div>
+    <form id="authForm">
+      <label for="authEmail">Email address</label><input id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+      <label for="authPassword">Password</label><input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="Your password">
+      <button class="btn primary full" id="authSubmit" type="submit">Sign in</button>
+    </form>
+    <button class="btn auth-google full" id="googleSignIn" type="button">Continue with Google</button>
+    <button class="auth-link" id="authModeToggle" type="button">Create a client account</button>
+    <button class="auth-link" id="resetPassword" type="button">Forgot your password?</button>
+    <div class="auth-message" id="authMessage" role="status" aria-live="polite"></div>
+    <div class="auth-note">Admin access is verified by the JD FX server. Choosing Admin does not grant administrator privileges.</div>
+  </div>
+</div>
+<div class="app" id="appShell">
+<header class="top"><div class="brand"><div class="logo">JD</div><div><h1>JD FX INTELLIGENCE</h1><p>Independent market research · Trader intelligence</p></div></div><div class="topright"><span class="pill" id="apiStatus">Connecting…</span><span class="pill" id="accountBar">Signed in</span><button class="btn" id="signOut">Sign out</button><button class="btn" id="refresh">↻ Refresh</button></div></header>
 <div class="layout"><aside class="sidebar" aria-label="Main navigation">
 <div class="nav active" data-page="overview"><span class="ico">◫</span>Overview</div><div class="nav" data-page="scanner"><span class="ico">⌁</span>Market scanner</div><div class="nav" data-page="alerts"><span class="ico">◷</span>Opportunity alerts</div><div class="nav" data-page="planning"><span class="ico">◎</span>Trade planning</div><div class="nav" data-page="performance"><span class="ico">▤</span>Performance lab</div><div class="nav" data-page="settings"><span class="ico">⚙</span>Settings</div>
 <div class="side-note"><b style="color:var(--gold)">Research mode</b><br>Decision support only. No broker connection or automatic trade execution.</div></aside>
@@ -90,6 +127,11 @@
 <div class="panel"><div class="panel-head"><div><h3>Automatic market backtest</h3><div class="sub">Uses fetched historical candles · no file upload · chronological out-of-sample holdout</div></div><button class="btn primary" id="runBacktest">Run backtest</button></div><div class="live-toolbar"><select class="field" id="backtestSymbol" aria-label="Backtest market"><option value="EURUSD">EUR/USD</option><option value="GBPUSD">GBP/USD</option><option value="USDJPY">USD/JPY</option><option value="AUDUSD">AUD/USD</option><option value="USDCAD">USD/CAD</option><option value="USDCHF">USD/CHF</option><option value="XAUUSD">Gold</option><option value="BTCUSD">BTC/USD</option><option value="ETHUSD">ETH/USD</option><option value="SOLUSD">SOL/USD</option><option value="SPX500">S&amp;P 500</option><option value="NDX100">Nasdaq 100</option><option value="DJI">Dow Jones</option><option value="DXY">US Dollar Index</option></select><select class="field" id="backtestInterval" aria-label="Backtest timeframe"><option value="1d">Daily</option><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="1w">Weekly</option><option value="15m">15 minutes</option></select><span class="sub" id="backtestStatus">Choose a market and run a test.</span></div><div id="backtestResults" class="resultgrid"><div class="live-empty">No backtest has been run in this session.</div></div><p class="sub">A benchmark pass requires enough resolved holdout trades, the selected win-rate threshold and positive net expectancy. Historical results are not a forecast.</p></div>
 <div class="panel"><div class="panel-head"><div><h3>JD FX realized signal performance</h3><div class="sub">Qualified signal lifecycle · TP1 versus stop · only resolved outcomes count</div></div><button class="btn" id="refreshPerformance">Refresh metrics</button></div><div id="performanceMetrics" class="metrics"><div class="live-empty">Loading realized signal metrics…</div></div><div id="performanceDetails" class="sub">Waiting for performance data.</div></div></section>
 <section class="page" id="page-settings"><div class="headline"><div><h2>Settings</h2><p>Configure local research thresholds for this browser.</p></div></div><div class="panel"><div class="formgrid"><div><label for="minWin">Minimum historical win rate (%)</label><input class="field" id="minWin" type="number" min="0" max="100" value="55"></div><div><label for="minSamples">Minimum resolved setups</label><input class="field" id="minSamples" type="number" min="1" value="30"></div><div><label for="targetR">Target (R)</label><input class="field" id="targetR" type="number" min=".1" step=".1" value="1.5"></div><div><label for="horizon">Evaluation candles</label><input class="field" id="horizon" type="number" min="1" value="20"></div></div><div class="row" style="margin-top:14px"><button class="btn primary" id="saveSettings">Save settings</button><span class="sub" id="settingsState">Not saved</span></div><div class="notice" style="margin-top:15px">Provider credentials are stored server-side on the hosting platform. Never enter API keys into this browser page.</div></div></section>
+<section class="page" id="page-admin">
+<div class="headline"><div><h2>Administrator console</h2><p>Restricted system view. Only the verified JD FX administrator can open this page.</p></div><button class="btn" id="adminRefresh">Refresh diagnostics</button></div>
+<div class="metrics"><div class="metric"><div class="label">Signed-in role</div><div class="value">ADMIN</div><div class="sub">Verified by the API</div></div><div class="metric"><div class="label">Account</div><div class="value" id="adminEmail">—</div><div class="sub" id="adminUserId">User ID unavailable</div></div><div class="metric"><div class="label">Access control</div><div class="value">Enforced</div><div class="sub">Supabase app metadata + server validation</div></div><div class="metric"><div class="label">Trading execution</div><div class="value">Disabled</div><div class="sub">Research-only system</div></div></div>
+<div class="panel"><div class="panel-head"><div><h3>System diagnostics</h3><div class="sub">Live response from the authenticated API.</div></div></div><pre id="adminDiagnostics">Loading administrator diagnostics…</pre></div>
+</section>
 <div class="foot">JD FX Intelligence · Independent research and decision support · Not financial advice</div></main></div></div><div id="toast" class="toast hidden" role="status"></div>
 <script src="./config.js"></script>
 <script>
@@ -150,6 +192,144 @@ async function loadNewsCalendar(){if(newsLoading)return;newsLoading=true;$('mark
 function loadSettings(){try{const s=JSON.parse(localStorage.getItem('jdFxSettings')||'{}');for(const [k,id] of Object.entries({minWin:'minWin',minSamples:'minSamples',targetR:'targetR',horizon:'horizon'}))if(s[k]!=null)$(id).value=s[k]}catch{}}
 $('runBacktest').onclick=runBacktest;$('refreshPerformance').onclick=loadPerformanceMetrics;$('loadNewsNow').onclick=loadNewsCalendar;$('newsMarketFilter').onchange=loadNewsCalendar;$('calculateRisk').onclick=calculateRisk;$('reloadAlerts').onclick=()=>{loadAlerts();loadMarketScan()};$('scanNow').onclick=loadMarketScan;$('alertsScanNow').onclick=loadMarketScan;$('intradayScanNow').onclick=loadIntradayScan;$('swingScanNow').onclick=loadSwingScan;$('scanInterval').onchange=loadMarketScan;$('autoScan').onclick=()=>{autoScanEnabled=!autoScanEnabled;$('autoScan').textContent=autoScanEnabled?'Pause auto-scan':'Resume auto-scan';toast(autoScanEnabled?'Automatic scanning resumed.':'Automatic scanning paused.')};$('enableNotifications').onclick=async()=>{if(!('Notification'in window)){toast('Browser notifications are not supported here.');return}const p=await Notification.requestPermission();$('enableNotifications').textContent=p==='granted'?'Alerts enabled':'Enable alerts';toast(p==='granted'?'Browser alerts enabled.':'Notification permission not granted.')};function openPairChart(id){if(!id||!tvSymbols[id]){toast('No active pair is available yet.');return}showPage('scanner');$('chartSymbol').value=tvSymbols[id];$('chartSymbol').dispatchEvent(new Event('change'))}function openTopActivePair(){const rows=(latestScan?.results||[]).filter(x=>x.status!=='error'&&x.analysis?.latest&&['QUALIFIED_CANDIDATE','WATCH_ONLY'].includes(x.alert?.alert?.status));rows.sort((a,b)=>(a.alert.alert.status==='QUALIFIED_CANDIDATE'?-1:1)-(b.alert.alert.status==='QUALIFIED_CANDIDATE'?-1:1));if(!rows.length){toast('No active setups right now. The scanner is still monitoring all five pairs.');return}openPairChart(rows[0].instrument_id)}$('activeSetupsMetric').addEventListener('click',openTopActivePair);$('activeSetupsMetric').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTopActivePair()}});document.addEventListener('click',e=>{const b=e.target.closest('[data-chart-symbol]');if(!b)return;openPairChart(b.dataset.chartSymbol)});$('refresh').onclick=()=>{loadStatus();loadInstruments();loadAlerts();loadMarketScan();toast('Workspace refreshed.')};
 $('saveSettings').onclick=()=>{const s={minWin:+$('minWin').value,minSamples:+$('minSamples').value,targetR:+$('targetR').value,horizon:+$('horizon').value};if(!(s.minWin>=0&&s.minWin<=100&&s.minSamples>=1&&s.targetR>0&&s.horizon>=1)){toast('Check the research settings values.');return}localStorage.setItem('jdFxSettings',JSON.stringify(s));renderProbabilityBot();$('settingsState').textContent='Saved on this device';toast('Settings saved locally.')};
-loadSettings();updateMarketSessionTimers();setInterval(updateMarketSessionTimers,1000);loadStatus();loadInstruments();loadAlerts();loadMarketScan();autoScanTimer=setInterval(()=>{if(autoScanEnabled&&document.visibilityState==='visible')loadMarketScan()},60000);
+function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(updateMarketSessionTimers,1000);loadStatus();loadInstruments();loadAlerts();loadMarketScan();autoScanTimer=setInterval(()=>{if(autoScanEnabled&&document.visibilityState==='visible')loadMarketScan()},60000);}
 </script><script src="./tools.js?v=b2676dd"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.102.0/dist/umd/supabase.js"></script>
+<script>
+(()=>{
+  const SUPABASE_URL='https://eiuhcccrauboqmelfaxn.supabase.co';
+  const SUPABASE_KEY='sb_publishable_dPCKx6Bi02mt7_VEp0bqrw_OKOqh9n_';
+  const auth=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:'pkce',detectSessionInUrl:false,persistSession:true,autoRefreshToken:true}});
+  const nativeFetch=window.fetch.bind(window);
+  window.jdFxSession=null;
+  let requestedMode=localStorage.getItem('jdFxLoginMode')||'client';
+  let creatingAccount=false,activeRole=null,booted=false,activation=0;
+  const el=id=>document.getElementById(id);
+  const message=value=>{el('authMessage').textContent=value||'';};
+  function setMode(mode){
+    requestedMode=mode==='admin'?'admin':'client';
+    localStorage.setItem('jdFxLoginMode',requestedMode);
+    creatingAccount=false;
+    el('clientMode').classList.toggle('active',requestedMode==='client');
+    el('adminMode').classList.toggle('active',requestedMode==='admin');
+    el('authTitle').textContent=requestedMode==='admin'?'Administrator sign in':'Client sign in';
+    el('authSubtitle').textContent=requestedMode==='admin'?'Use your authorized administrator account.':'Sign in to your JD FX client workspace.';
+    el('authModeToggle').style.display=requestedMode==='client'?'block':'none';
+    el('authModeToggle').textContent='Create a client account';
+    el('authSubmit').textContent='Sign in';
+    el('authPassword').autocomplete='current-password';
+    message('');
+  }
+  function showLogin(){
+    activation++;
+    window.jdFxSession=null;activeRole=null;booted=false;
+    el('appShell').style.display='none';el('authScreen').style.display='grid';
+    const nav=el('adminNav');if(nav)nav.remove();
+  }
+  async function activateSession(session){
+    if(!session?.access_token){showLogin();return;}
+    const requestId=++activation;
+    window.jdFxSession=session;
+    const response=await nativeFetch(apiUrl('/auth/me'),{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}});
+    const profile=await response.json().catch(()=>({}));
+    if(requestId!==activation)return;
+    if(!response.ok){await auth.auth.signOut();showLogin();message(profile.detail||'Your session could not be verified. Please sign in again.');return;}
+    const role=profile.role==='admin'?'admin':'client';
+    if(role!==requestedMode){
+      await auth.auth.signOut();
+      showLogin();
+      message(role==='admin'?'This is an administrator account. Choose Admin login.':'This account does not have administrator access.');
+      return;
+    }
+    activeRole=role;
+    el('authScreen').style.display='none';el('appShell').style.display='block';
+    el('accountBar').textContent=(profile.email||session.user?.email||'Account')+' · '+role.toUpperCase();
+    if(role==='admin'){
+      let nav=el('adminNav');
+      if(!nav){
+        nav=document.createElement('div');nav.id='adminNav';nav.className='nav';nav.innerHTML='<span class="ico">⚙</span>Administrator console';
+        nav.onclick=()=>window.showPage('admin');
+        nav.tabIndex=0;nav.setAttribute('role','button');
+        document.querySelector('.sidebar').insertBefore(nav,document.querySelector('.side-note'));
+      }
+      loadAdminConsole();
+    }
+    if(!booted){booted=true;bootDashboard();}
+  }
+  async function loadAdminConsole(){
+    const response=await window.fetch(apiUrl('/admin/status'));
+    const status=await response.json().catch(()=>({}));
+    if(!response.ok){el('adminDiagnostics').textContent=status.detail||'Administrator verification failed.';return;}
+    el('adminEmail').textContent=el('accountBar').textContent.split(' · ')[0];
+    el('adminUserId').textContent='User ID: '+(window.jdFxSession?.user?.id||'—');
+    const diagnostics=await window.fetch(apiUrl('/system/diagnostics'));
+    const data=await diagnostics.json().catch(()=>({}));
+    el('adminDiagnostics').textContent=JSON.stringify({access:status,system:data},null,2);
+  }
+  el('clientMode').onclick=()=>setMode('client');
+  el('adminMode').onclick=()=>setMode('admin');
+  el('authModeToggle').onclick=()=>{
+    if(requestedMode!=='client')return;
+    creatingAccount=!creatingAccount;
+    el('authTitle').textContent=creatingAccount?'Create your client account':'Client sign in';
+    el('authSubmit').textContent=creatingAccount?'Create account':'Sign in';
+    el('authModeToggle').textContent=creatingAccount?'Already registered? Sign in':'Create a client account';
+    el('authPassword').autocomplete=creatingAccount?'new-password':'current-password';
+    message('');
+  };
+  el('authForm').onsubmit=async event=>{
+    event.preventDefault();
+    const email=el('authEmail').value.trim(),password=el('authPassword').value;
+    el('authSubmit').disabled=true;message('Connecting securely…');
+    try{
+      if(creatingAccount){
+        const {data,error}=await auth.auth.signUp({email,password,options:{emailRedirectTo:location.href.split('?')[0]}});
+        if(error)throw error;
+        if(data.session)await activateSession(data.session);
+        else message('Account created. Check your email to confirm, then sign in.');
+      }else{
+        const {data,error}=await auth.auth.signInWithPassword({email,password});
+        if(error)throw error;
+        if(!data.session)throw new Error('No active session was returned. Confirm your email before signing in.');
+        await activateSession(data.session);
+      }
+    }catch(error){message(error.message||'Sign-in failed.');}
+    finally{el('authSubmit').disabled=false;}
+  };
+  el('googleSignIn').onclick=async()=>{
+    message('Redirecting to Google…');
+    try{
+      const redirect=new URL(location.href);redirect.search='';redirect.hash='';
+      const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:redirect.toString()}});
+      if(error)throw error;
+    }catch(error){message(error.message||'Google sign-in could not be started.');}
+  };
+  el('resetPassword').onclick=async()=>{
+    const email=el('authEmail').value.trim();if(!email){message('Enter your email address first.');return;}
+    const redirect=new URL(location.href);redirect.search='';redirect.hash='';
+    const {error}=await auth.auth.resetPasswordForEmail(email,{redirectTo:redirect.toString()});
+    message(error?error.message:'If that account exists, password reset instructions have been sent.');
+  };
+  el('signOut').onclick=async()=>{await auth.auth.signOut();showLogin();};
+  el('adminRefresh').onclick=loadAdminConsole;
+  auth.auth.onAuthStateChange((event,session)=>{
+    if(event==='SIGNED_OUT'||!session){showLogin();return;}
+    if(session)void activateSession(session);
+  });
+  (async()=>{
+    try{
+      const url=new URL(location.href),code=url.searchParams.get('code');
+      if(code){
+        const {error}=await auth.auth.exchangeCodeForSession(code);
+        if(error)throw error;
+        url.searchParams.delete('code');history.replaceState({},document.title,url.pathname+url.search+url.hash);
+      }
+      const {data,error}=await auth.auth.getSession();if(error)throw error;
+      if(data.session)await activateSession(data.session);else showLogin();
+    }catch(error){showLogin();message(error.message||'Sign-in could not be completed.');}
+  })();
+  setMode(requestedMode);
+})();
+</script>
 </body></html>
