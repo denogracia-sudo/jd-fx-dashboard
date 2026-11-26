@@ -67,6 +67,36 @@
   function switchPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));}
   function empty(s){return '<div class="live-empty">'+esc(s)+'</div>';}
   function showError(id,e){const el=$(id);if(el)el.innerHTML=empty('Could not load data: '+(e.message||e));}
+  async function autoRecordQualifiedPaperTrades(rows){
+    const qualified=(rows||[]).filter(x=>{
+      const a=x.alert||{},p=x.entry_plan||{};
+      return a.status==='QUALIFIED_CANDIDATE' && ['BUY','SELL'].includes(a.side)
+        && x.symbol && Number(p.stop_loss)>0 && Number(p.take_profit_1)>0
+        && Number(p.reference_entry)>0 && a.signal_candle_utc;
+    });
+    let created=0,skipped=0,failed=0;
+    for(const x of qualified){
+      const a=x.alert,p=x.entry_plan;
+      const key=[x.symbol,x.timeframe||'',a.side,a.signal_candle_utc].join('|');
+      const storageKey='jdFxPaperAutoRecorded:'+key;
+      if(localStorage.getItem(storageKey)){skipped++;continue;}
+      try{
+        // Do not reuse a scan-time reference price as a fill. The API obtains and
+        // freshness-checks a new quote before opening the simulated position.
+        const response=await fetch(API+'/paper/trades',{
+          method:'POST',
+          headers:{Accept:'application/json','Content-Type':'application/json'},
+          body:JSON.stringify({symbol:x.symbol,side:a.side,units:1,
+            stop_loss:Number(p.stop_loss),take_profit:Number(p.take_profit_1)})
+        });
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(data.detail||('HTTP '+response.status));
+        localStorage.setItem(storageKey,JSON.stringify({trade_id:data.trade?.id||null,created_at:new Date().toISOString()}));
+        created++;
+      }catch(error){failed++;}
+    }
+    return {qualified:qualified.length,created,skipped,failed};
+  }
   async function scanAlgo(){
     const el=$('algoResults'), btn=$('algoRun');
     let symbols=$('algoSymbols').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
@@ -102,7 +132,7 @@
         try{
           const d=await call('/algo/scan?symbols='+encodeURIComponent(symbols[i])+'&timeframes='+encodeURIComponent(frames.join(','))+'&notify=false',120000);
           const rows=d.results||d.signals||d.items||[];
-          if(rows.length) allRows.push(...rows); else failures.push({symbol:symbols[i],reason:'API returned no rows'});
+          if(rows.length){ allRows.push(...rows); const paper=await autoRecordQualifiedPaperTrades(rows); if(paper.created||paper.failed) failures.push({symbol:symbols[i],reason:'Paper simulation: '+paper.created+' opened, '+paper.failed+' failed, '+paper.skipped+' already recorded.'}); } else failures.push({symbol:symbols[i],reason:'API returned no rows'});
         }catch(e){failures.push({symbol:symbols[i],reason:e.message||'request failed'});}
         render();
       }
