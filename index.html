@@ -203,6 +203,11 @@ function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(
   const auth=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:'pkce',detectSessionInUrl:false,persistSession:true,autoRefreshToken:true}});
   const nativeFetch=window.fetch.bind(window);
   window.jdFxSession=null;
+  window.fetch=(input,init={})=>{
+    const headers=new Headers(init.headers||(input instanceof Request?input.headers:undefined));
+    if(window.jdFxSession?.access_token)headers.set('Authorization','Bearer '+window.jdFxSession.access_token);
+    return nativeFetch(input,{...init,headers});
+  };
   let requestedMode=localStorage.getItem('jdFxLoginMode')||'client';
   let creatingAccount=false,activeRole=null,booted=false,activation=0;
   const el=id=>document.getElementById(id);
