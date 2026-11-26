@@ -200,6 +200,7 @@ function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(
 (()=>{
   const SUPABASE_URL='https://eiuhcccrauboqmelfaxn.supabase.co';
   const SUPABASE_KEY='sb_publishable_dPCKx6Bi02mt7_VEp0bqrw_OKOqh9n_';
+  const CANONICAL_APP_URL='https://denogracia-sudo.github.io/jd-fx-dashboard/';
   const auth=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:'pkce',detectSessionInUrl:false,persistSession:true,autoRefreshToken:true}});
   const nativeFetch=window.fetch.bind(window);
   const apiOrigin=new URL(API_BASE||location.origin,location.href).origin;
@@ -292,7 +293,7 @@ function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(
     el('authSubmit').disabled=true;message('Connecting securely…');
     try{
       if(creatingAccount){
-        const {data,error}=await auth.auth.signUp({email,password,options:{emailRedirectTo:location.href.split('?')[0]}});
+        const {data,error}=await auth.auth.signUp({email,password,options:{emailRedirectTo:CANONICAL_APP_URL}});
         if(error)throw error;
         if(data.session)await activateSession(data.session);
         else message('Account created. Check your email to confirm, then sign in.');
@@ -308,14 +309,14 @@ function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(
   el('googleSignIn').onclick=async()=>{
     message('Redirecting to Google…');
     try{
-      const redirect=new URL(location.href);redirect.search='';redirect.hash='';
+      const redirect=new URL(CANONICAL_APP_URL);
       const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:redirect.toString()}});
       if(error)throw error;
     }catch(error){message(error.message||'Google sign-in could not be started.');}
   };
   el('resetPassword').onclick=async()=>{
     const email=el('authEmail').value.trim();if(!email){message('Enter your email address first.');return;}
-    const redirect=new URL(location.href);redirect.search='';redirect.hash='';
+    const redirect=new URL(CANONICAL_APP_URL);
     const {error}=await auth.auth.resetPasswordForEmail(email,{redirectTo:redirect.toString()});
     message(error?error.message:'If that account exists, password reset instructions have been sent.');
   };
