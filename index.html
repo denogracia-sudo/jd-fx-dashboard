@@ -223,11 +223,12 @@ function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(
     el('clientMode').classList.toggle('active',requestedMode==='client');
     el('adminMode').classList.toggle('active',requestedMode==='admin');
     el('authTitle').textContent=requestedMode==='admin'?'Administrator sign in':'Client sign in';
-    el('authSubtitle').textContent=requestedMode==='admin'?'Use your authorized administrator account.':'Sign in to your JD FX client workspace.';
+    el('authSubtitle').textContent=requestedMode==='admin'?'Use your authorized administrator account.':(creatingAccount?'Register a client account to access JD FX.':'Sign in to your JD FX client workspace.');
     el('authModeToggle').style.display=requestedMode==='client'?'block':'none';
-    el('authModeToggle').textContent='Create a client account';
-    el('authSubmit').textContent='Sign in';
-    el('authPassword').autocomplete='current-password';
+    el('authModeToggle').textContent=creatingAccount?'Already registered? Sign in':'Create a client account';
+    el('authSubmit').textContent=creatingAccount?'Create account':'Sign in';
+    el('authPassword').autocomplete=creatingAccount?'new-password':'current-password';
+    el('resetPassword').style.display=requestedMode==='client'&&!creatingAccount?'block':'none';
     message('');
   }
   function showLogin(){
@@ -282,9 +283,11 @@ function bootDashboard(){loadSettings();updateMarketSessionTimers();setInterval(
     if(requestedMode!=='client')return;
     creatingAccount=!creatingAccount;
     el('authTitle').textContent=creatingAccount?'Create your client account':'Client sign in';
+    el('authSubtitle').textContent=creatingAccount?'Register a client account to access JD FX.':'Sign in to your JD FX client workspace.';
     el('authSubmit').textContent=creatingAccount?'Create account':'Sign in';
     el('authModeToggle').textContent=creatingAccount?'Already registered? Sign in':'Create a client account';
     el('authPassword').autocomplete=creatingAccount?'new-password':'current-password';
+    el('resetPassword').style.display=creatingAccount?'none':'block';
     message('');
   };
   el('authForm').onsubmit=async event=>{
