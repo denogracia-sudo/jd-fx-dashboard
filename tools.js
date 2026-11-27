@@ -4,12 +4,13 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = (v, d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString(undefined,{maximumFractionDigits:d}) : '—';
   const panel = (title, sub, body) => '<div class="panel"><div class="panel-head"><div><h3>'+title+'</h3><div class="sub">'+sub+'</div></div></div>'+body+'</div>';
+  const authHeaders = (extra={}) => ({...extra,...(window.jdFxSession?.access_token ? {Authorization:'Bearer '+window.jdFxSession.access_token} : {})});
   const call = async (path, timeoutMs=30000) => {
     if (!API) throw new Error('API base URL is not configured.');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const r = await fetch(API + path, {headers:{Accept:'application/json'}, signal:controller.signal});
+      const r = await fetch(API + path, {headers:authHeaders({Accept:'application/json'}), signal:controller.signal});
       const data = await r.json().catch(()=>({}));
       if (!r.ok) throw new Error(data.detail || data.message || ('HTTP '+r.status));
       return data;
@@ -85,7 +86,7 @@
         // freshness-checks a new quote before opening the simulated position.
         const response=await fetch(API+'/paper/trades',{
           method:'POST',
-          headers:{Accept:'application/json','Content-Type':'application/json'},
+          headers:authHeaders({Accept:'application/json','Content-Type':'application/json'}),
           body:JSON.stringify({symbol:x.symbol,side:a.side,units:1,
             stop_loss:Number(p.stop_loss),take_profit:Number(p.take_profit_1)})
         });
@@ -229,11 +230,11 @@
     if(!(entry>0&&units>0)){alert('Enter a valid entry price and positive units.');return;}
     if(stop!=null&&((side==='BUY'&&stop>=entry)||(side==='SELL'&&stop<=entry))){alert('Stop loss must be below entry for BUY and above entry for SELL.');return;}
     if(target!=null&&((side==='BUY'&&target<=entry)||(side==='SELL'&&target>=entry))){alert('Take profit must be above entry for BUY and below entry for SELL.');return;}
-    try{const r=await fetch(API+'/paper/trades',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({symbol,side,entry_price:entry,units,stop_loss:stop,take_profit:target})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));await loadPaperTrades();$('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';}catch(e){alert('Could not save simulated trade: '+e.message);}
+    try{const r=await fetch(API+'/paper/trades',{method:'POST',headers:authHeaders({Accept:'application/json','Content-Type':'application/json'}),body:JSON.stringify({symbol,side,entry_price:entry,units,stop_loss:stop,take_profit:target})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));await loadPaperTrades();$('paperEntry').value='';$('paperStop').value='';$('paperTarget').value='';}catch(e){alert('Could not save simulated trade: '+e.message);}
   }
   async function closePaperTrade(id){
     if(!confirm('Close this simulated position using the latest observed quote?'))return;
-    try{const r=await fetch(API+'/paper/trades/'+encodeURIComponent(id)+'/close',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));await loadPaperTrades();}catch(e){alert('Could not close simulated trade: '+e.message);}
+    try{const r=await fetch(API+'/paper/trades/'+encodeURIComponent(id)+'/close',{method:'POST',headers:authHeaders({Accept:'application/json','Content-Type':'application/json'}),body:JSON.stringify({})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));await loadPaperTrades();}catch(e){alert('Could not close simulated trade: '+e.message);}
   }
   async function loadPaperTrades(){
     const el=$('paperTrades');if(!el)return;el.innerHTML=empty('Refreshing server-side paper ledger and monitoring open positions…');
